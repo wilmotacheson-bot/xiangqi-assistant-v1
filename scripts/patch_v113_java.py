@@ -105,57 +105,59 @@ p.write_text(s)
 # EngineBridge: invalidate delayed results from previous sessions without restarting Pikafish.
 p=Path('app/src/main/java/com/openai/xiangqiassist/EngineBridge.java')
 s=p.read_text()
-old='              private final AtomicInteger latestRequest = new AtomicInteger(-1);'
-new='              private final AtomicInteger latestRequest = new AtomicInteger(-1);\n              private final AtomicInteger generation = new AtomicInteger(0);'
-if old not in s: raise SystemExit('EngineBridge latestRequest anchor missing')
-s=s.replace(old,new,1)
 
-old="""              private void deliver(int requestId, PikafishEngine.Result r) {
-                  if (latestRequest.get() != requestId) return;
-                  String js = "window.onEngineResult(" + requestId + "," +
-                          JSONObject.quote(r.bestMove) + "," + r.scoreCp + "," + r.depth + "," +
-                          JSONObject.quote(r.error == null ? "" : r.error) + ")";
-                  webView.post(() -> {
-                      if (latestRequest.get() == requestId) webView.evaluateJavascript(js, null);
-                  });
-              }"""
-new="""              private void deliver(int gen, int requestId, PikafishEngine.Result r) {
-                  if (generation.get() != gen || latestRequest.get() != requestId) return;
-                  String js = "window.onEngineResult(" + requestId + "," +
-                          JSONObject.quote(r.bestMove) + "," + r.scoreCp + "," + r.depth + "," +
-                          JSONObject.quote(r.error == null ? "" : r.error) + ")";
-                  webView.post(() -> {
-                      if (generation.get() == gen && latestRequest.get() == requestId) webView.evaluateJavascript(js, null);
-                  });
-              }"""
-if old not in s: raise SystemExit('EngineBridge deliver block missing')
-s=s.replace(old,new,1)
+s,n=re.subn(r'(\s*)private final AtomicInteger latestRequest = new AtomicInteger\(-1\);',
+           lambda m:m.group(1)+'private final AtomicInteger latestRequest = new AtomicInteger(-1);'+m.group(1)+'private final AtomicInteger generation = new AtomicInteger(0);',
+           s,count=1)
+if n!=1: raise SystemExit('EngineBridge latestRequest anchor missing')
 
-old="""              public synchronized void analyze(String fen, int requestId, int moveTimeMs) {
-                  latestRequest.set(requestId);
-                  if (!engine.isReady()) {
-                      deliver(requestId, PikafishEngine.Result.err("Pikafish 尚未就绪"));
-                      return;
-                  }
-                  worker.getQueue().clear();
-                  worker.submit(() -> deliver(requestId, engine.analyze(fen, moveTimeMs)));
-              }"""
-new="""              public synchronized void analyze(String fen, int requestId, int moveTimeMs) {
-                  int gen = generation.get();
-                  latestRequest.set(requestId);
-                  if (!engine.isReady()) {
-                      deliver(gen, requestId, PikafishEngine.Result.err("Pikafish 尚未就绪"));
-                      return;
-                  }
-                  worker.getQueue().clear();
-                  worker.submit(() -> deliver(gen, requestId, engine.analyze(fen, moveTimeMs)));
-              }
+pat=r'''    private void deliver\(int requestId, PikafishEngine\.Result r\) \{
+        if \(latestRequest\.get\(\) != requestId\) return;
+        String js = "window\.onEngineResult\(" \+ requestId \+ "," \+
+                JSONObject\.quote\(r\.bestMove\) \+ "," \+ r\.scoreCp \+ "," \+ r\.depth \+ "," \+
+                JSONObject\.quote\(r\.error == null \? "" : r\.error\) \+ "\)";
+        webView\.post\(\(\) -> \{
+            if \(latestRequest\.get\(\) == requestId\) webView\.evaluateJavascript\(js, null\);
+        \}\);
+    \}'''
+rep='''    private void deliver(int gen, int requestId, PikafishEngine.Result r) {
+        if (generation.get() != gen || latestRequest.get() != requestId) return;
+        String js = "window.onEngineResult(" + requestId + "," +
+                JSONObject.quote(r.bestMove) + "," + r.scoreCp + "," + r.depth + "," +
+                JSONObject.quote(r.error == null ? "" : r.error) + ")";
+        webView.post(() -> {
+            if (generation.get() == gen && latestRequest.get() == requestId) webView.evaluateJavascript(js, null);
+        });
+    }'''
+s,n=re.subn(pat,rep,s,count=1)
+if n!=1: raise SystemExit('EngineBridge deliver block missing')
 
-              synchronized void newSession() {
-                  generation.incrementAndGet();
-                  latestRequest.set(-1);
-                  worker.getQueue().clear();
-              }"""
-if old not in s: raise SystemExit('EngineBridge analyze block missing')
-s=s.replace(old,new,1)
+pat=r'''    public synchronized void analyze\(String fen, int requestId, int moveTimeMs\) \{
+        latestRequest\.set\(requestId\);
+        if \(!engine\.isReady\(\)\) \{
+            deliver\(requestId, PikafishEngine\.Result\.err\("Pikafish 尚未就绪"\)\);
+            return;
+        \}
+        worker\.getQueue\(\)\.clear\(\);
+        worker\.submit\(\(\) -> deliver\(requestId, engine\.analyze\(fen, moveTimeMs\)\)\);
+    \}'''
+rep='''    public synchronized void analyze(String fen, int requestId, int moveTimeMs) {
+        int gen = generation.get();
+        latestRequest.set(requestId);
+        if (!engine.isReady()) {
+            deliver(gen, requestId, PikafishEngine.Result.err("Pikafish 尚未就绪"));
+            return;
+        }
+        worker.getQueue().clear();
+        worker.submit(() -> deliver(gen, requestId, engine.analyze(fen, moveTimeMs)));
+    }
+
+    synchronized void newSession() {
+        generation.incrementAndGet();
+        latestRequest.set(-1);
+        worker.getQueue().clear();
+    }'''
+s,n=re.subn(pat,rep,s,count=1)
+if n!=1: raise SystemExit('EngineBridge analyze block missing')
+
 p.write_text(s)
