@@ -1,4 +1,4 @@
-name: Build Xiangqi Assistant v1.0.9 Stable Adaptive
+name: Build Xiangqi Assistant v1.0.10 Hard Budget
 
 on:
   workflow_dispatch:
@@ -19,10 +19,10 @@ jobs:
           unzip -t baseline.zip
           rm -rf app
           unzip -o baseline.zip -d .
-          sed -i "s/applicationId 'com.openai.xiangqiassist.compat'/applicationId 'com.openai.xiangqiassist.v109'/" app/build.gradle
-          sed -E -i "s/versionCode [0-9]+/versionCode 109/" app/build.gradle
-          sed -E -i "s/versionName '[^']+'/versionName '1.0.9-stable'/" app/build.gradle
-          sed -i 's/android:label="象棋助手 v1"/android:label="象棋助手 1.0.9 稳定版"/' app/src/main/AndroidManifest.xml
+          sed -i "s/applicationId 'com.openai.xiangqiassist.compat'/applicationId 'com.openai.xiangqiassist.v110'/" app/build.gradle
+          sed -E -i "s/versionCode [0-9]+/versionCode 110/" app/build.gradle
+          sed -E -i "s/versionName '[^']+'/versionName '1.0.10-hard-budget'/" app/build.gradle
+          sed -i 's/android:label="象棋助手 v1"/android:label="象棋助手 1.0.10 硬限时版"/' app/src/main/AndroidManifest.xml
 
       - name: Patch resilient Pikafish runtime
         run: |
@@ -53,139 +53,134 @@ jobs:
               }
 
               private final Context context;
-              private Process process;
-              private BufferedWriter writer;
+              private final Object lifecycleLock = new Object();
+              private final Object tailLock = new Object();
+              private volatile Process process;
+              private volatile BufferedWriter writer;
               private final BlockingQueue<String> lines = new LinkedBlockingQueue<>();
               private final ArrayDeque<String> tail = new ArrayDeque<>();
-              private Thread readerThread;
-              private boolean ready;
-              private long startedAtMs;
+              private volatile Thread readerThread;
+              private volatile boolean ready;
+              private volatile long startedAtMs;
               private static final Pattern DEPTH = Pattern.compile("\\bdepth\\s+(\\d+)");
               private static final Pattern SCORE_CP = Pattern.compile("\\bscore\\s+cp\\s+(-?\\d+)");
               private static final Pattern SCORE_MATE = Pattern.compile("\\bscore\\s+mate\\s+(-?\\d+)");
 
               PikafishEngine(Context c) { context = c.getApplicationContext(); }
 
-              synchronized void warmUp() {
+              boolean isReady() {
+                  Process p = process;
+                  return ready && p != null && p.isAlive() && writer != null;
+              }
+
+              void warmUp() {
+                  if (isReady()) return;
                   try { ensureStarted(); }
                   catch (Throwable t) { closeQuietly(); }
               }
 
-              synchronized Result analyze(String fen, int moveTimeMs) {
-                  String last = "";
-                  for (int attempt = 1; attempt <= 2; attempt++) {
-                      try {
-                          return analyzeOnce(fen, moveTimeMs);
-                      } catch (InterruptedException e) {
-                          Thread.currentThread().interrupt();
-                          return Result.err("Pikafish 任务已取消");
-                      } catch (Throwable t) {
-                          last = describe(t) + diagnosticSuffix();
-                          closeQuietly();
-                          if (attempt == 1) {
-                              try { Thread.sleep(120L); }
-                              catch (InterruptedException e) {
-                                  Thread.currentThread().interrupt();
-                                  return Result.err("Pikafish 任务已取消");
-                              }
-                          }
-                      }
+              Result analyze(String fen, int moveTimeMs) {
+                  if (!isReady()) return Result.err("Pikafish 尚未就绪");
+                  try {
+                      return analyzeOnce(fen, moveTimeMs);
+                  } catch (InterruptedException e) {
+                      Thread.currentThread().interrupt();
+                      return Result.err("Pikafish 任务已取消");
+                  } catch (Throwable t) {
+                      String msg = describe(t) + diagnosticSuffix();
+                      closeQuietly();
+                      return Result.err(msg);
                   }
-                  return Result.err("Pikafish 两次启动均失败: " + last);
               }
 
               private Result analyzeOnce(String fen, int moveTimeMs) throws Exception {
-                  ensureStarted();
+                  if (!isReady()) throw new IOException("引擎未就绪");
                   drain();
                   send("position fen " + fen);
-                  int thinkMs = Math.max(250, Math.min(5000, moveTimeMs));
+                  int thinkMs = Math.max(250, Math.min(4500, moveTimeMs));
                   send("go movetime " + thinkMs);
 
-                  long end = System.currentTimeMillis() + thinkMs + 2500L;
+                  long end = System.currentTimeMillis() + thinkMs + 350L;
                   int cp = 0, depth = 0;
                   while (System.currentTimeMillis() < end) {
                       if (Thread.currentThread().isInterrupted()) throw new InterruptedException();
-                      if (process == null || !process.isAlive()) {
-                          throw new IOException("引擎进程已退出" + exitSuffix());
-                      }
-                      String line = lines.poll(120, TimeUnit.MILLISECONDS);
+                      Process p = process;
+                      if (p == null || !p.isAlive()) throw new IOException("引擎进程已退出" + exitSuffix());
+                      String line = lines.poll(80, TimeUnit.MILLISECONDS);
                       if (line == null) continue;
-                      remember(line);
                       if (line.startsWith("info ")) {
                           Matcher d = DEPTH.matcher(line); if (d.find()) depth = Integer.parseInt(d.group(1));
                           Matcher c = SCORE_CP.matcher(line); if (c.find()) cp = Integer.parseInt(c.group(1));
                           Matcher m = SCORE_MATE.matcher(line); if (m.find()) cp = Integer.parseInt(m.group(1)) > 0 ? 30000 : -30000;
                       } else if (line.startsWith("bestmove ")) {
-                          String[] p = line.trim().split("\\s+");
-                          if (p.length < 2 || p[1].equals("(none)")) return Result.err("当前局面无可用着法");
-                          return new Result(p[1], cp, depth, null);
+                          String[] p2 = line.trim().split("\\s+");
+                          if (p2.length < 2 || p2[1].equals("(none)")) return Result.err("当前局面无可用着法");
+                          return new Result(p2[1], cp, depth, null);
                       } else if (line.contains("CRITICAL ERROR")) {
                           throw new IOException(line);
                       }
                   }
 
                   try { send("stop"); } catch (Throwable ignored) {}
-                  long stopEnd = System.currentTimeMillis() + 1200L;
+                  long stopEnd = System.currentTimeMillis() + 300L;
                   while (System.currentTimeMillis() < stopEnd) {
-                      String line = lines.poll(100, TimeUnit.MILLISECONDS);
-                      if (line == null) continue;
-                      remember(line);
-                      if (line.startsWith("bestmove ")) {
-                          String[] p = line.trim().split("\\s+");
-                          if (p.length >= 2 && !p[1].equals("(none)")) return new Result(p[1], cp, depth, null);
+                      String line = lines.poll(50, TimeUnit.MILLISECONDS);
+                      if (line != null && line.startsWith("bestmove ")) {
+                          String[] p2 = line.trim().split("\\s+");
+                          if (p2.length >= 2 && !p2[1].equals("(none)")) return new Result(p2[1], cp, depth, null);
                       }
                   }
-                  throw new IOException("计算超时");
+                  throw new IOException("本步计算超过硬时限");
               }
 
               private void ensureStarted() throws Exception {
-                  if (ready && process != null && process.isAlive() && writer != null) return;
-                  closeQuietly();
+                  synchronized (lifecycleLock) {
+                      if (isReady()) return;
+                      closeQuietlyLocked();
 
-                  File binary = new File(context.getApplicationInfo().nativeLibraryDir, "libpikafish.so");
-                  if (!binary.exists() || binary.length() < 100000) {
-                      throw new FileNotFoundException("APK 内 Pikafish 引擎文件缺失");
+                      File binary = new File(context.getApplicationInfo().nativeLibraryDir, "libpikafish.so");
+                      if (!binary.exists() || binary.length() < 100000) {
+                          throw new FileNotFoundException("APK 内 Pikafish 引擎文件缺失");
+                      }
+                      File net = ensureNetwork();
+
+                      ProcessBuilder pb = new ProcessBuilder(binary.getAbsolutePath());
+                      pb.redirectErrorStream(true);
+                      pb.directory(context.getFilesDir());
+                      Process newProcess = pb.start();
+                      process = newProcess;
+                      startedAtMs = System.currentTimeMillis();
+                      writer = new BufferedWriter(new OutputStreamWriter(newProcess.getOutputStream(), StandardCharsets.UTF_8));
+                      readerThread = new Thread(() -> {
+                          try (BufferedReader br = new BufferedReader(new InputStreamReader(newProcess.getInputStream(), StandardCharsets.UTF_8))) {
+                              String line;
+                              while ((line = br.readLine()) != null) {
+                                  lines.offer(line);
+                                  remember(line);
+                              }
+                          } catch (IOException ignored) {}
+                      }, "pikafish-reader");
+                      readerThread.setDaemon(true);
+                      readerThread.start();
+
+                      send("uci");
+                      if (!waitFor("uciok", 7000)) throw new IOException("启动等待 uciok 超时" + exitSuffix() + diagnosticSuffix());
+                      send("setoption name Threads value 2");
+                      send("setoption name Hash value 32");
+                      send("setoption name EvalFile value " + net.getAbsolutePath());
+                      send("isready");
+                      if (!waitFor("readyok", 15000)) throw new IOException("NNUE 加载/ready 超时" + exitSuffix() + diagnosticSuffix());
+                      send("ucinewgame");
+                      send("isready");
+                      if (!waitFor("readyok", 4000)) throw new IOException("新局初始化超时" + exitSuffix() + diagnosticSuffix());
+                      ready = true;
+                      drain();
                   }
-                  File net = ensureNetwork();
-
-                  ProcessBuilder pb = new ProcessBuilder(binary.getAbsolutePath());
-                  pb.redirectErrorStream(true);
-                  pb.directory(context.getFilesDir());
-                  process = pb.start();
-                  startedAtMs = System.currentTimeMillis();
-                  writer = new BufferedWriter(new OutputStreamWriter(process.getOutputStream(), StandardCharsets.UTF_8));
-                  readerThread = new Thread(() -> {
-                      Process p = process;
-                      if (p == null) return;
-                      try (BufferedReader br = new BufferedReader(new InputStreamReader(p.getInputStream(), StandardCharsets.UTF_8))) {
-                          String line;
-                          while ((line = br.readLine()) != null) {
-                              remember(line);
-                              lines.offer(line);
-                          }
-                      } catch (IOException ignored) {}
-                  }, "pikafish-reader");
-                  readerThread.setDaemon(true);
-                  readerThread.start();
-
-                  send("uci");
-                  if (!waitFor("uciok", 7000)) throw new IOException("启动等待 uciok 超时" + exitSuffix() + diagnosticSuffix());
-                  send("setoption name Threads value 2");
-                  send("setoption name Hash value 32");
-                  send("setoption name EvalFile value " + net.getAbsolutePath());
-                  send("isready");
-                  if (!waitFor("readyok", 15000)) throw new IOException("NNUE 加载/ready 超时" + exitSuffix() + diagnosticSuffix());
-                  send("ucinewgame");
-                  send("isready");
-                  if (!waitFor("readyok", 4000)) throw new IOException("新局初始化超时" + exitSuffix() + diagnosticSuffix());
-                  ready = true;
-                  drain();
               }
 
               private File ensureNetwork() throws IOException {
                   File out = new File(context.getFilesDir(), "pikafish.nnue");
                   if (out.exists() && out.length() > 1024 * 1024) return out;
-
                   File tmp = new File(context.getFilesDir(), "pikafish.nnue.tmp");
                   if (tmp.exists()) tmp.delete();
                   try (InputStream in = context.getAssets().open("pikafish.nnue");
@@ -203,42 +198,48 @@ jobs:
               }
 
               private void send(String s) throws IOException {
-                  if (writer == null) throw new IOException("engine stdin closed");
-                  writer.write(s);
-                  writer.newLine();
-                  writer.flush();
+                  BufferedWriter w = writer;
+                  if (w == null) throw new IOException("engine stdin closed");
+                  w.write(s);
+                  w.newLine();
+                  w.flush();
               }
 
               private boolean waitFor(String token, long ms) throws InterruptedException {
                   long end = System.currentTimeMillis() + ms;
                   while (System.currentTimeMillis() < end) {
                       if (Thread.currentThread().isInterrupted()) throw new InterruptedException();
-                      if (process == null || !process.isAlive()) return false;
-                      String line = lines.poll(120, TimeUnit.MILLISECONDS);
+                      Process p = process;
+                      if (p == null || !p.isAlive()) return false;
+                      String line = lines.poll(100, TimeUnit.MILLISECONDS);
                       if (line == null) continue;
-                      remember(line);
                       if (line.equals(token) || line.startsWith(token + " ")) return true;
                       if (line.contains("CRITICAL ERROR")) return false;
                   }
                   return false;
               }
 
-              private synchronized void remember(String line) {
+              private void remember(String line) {
                   if (line == null || line.isEmpty()) return;
-                  if (tail.size() >= 6) tail.removeFirst();
-                  tail.addLast(line.length() > 180 ? line.substring(0, 180) : line);
+                  synchronized (tailLock) {
+                      if (tail.size() >= 6) tail.removeFirst();
+                      tail.addLast(line.length() > 180 ? line.substring(0, 180) : line);
+                  }
               }
 
-              private synchronized String diagnosticSuffix() {
-                  if (tail.isEmpty()) return "";
-                  String last = tail.peekLast();
-                  if (last == null || last.startsWith("info ")) return "";
-                  return " · " + last;
+              private String diagnosticSuffix() {
+                  synchronized (tailLock) {
+                      if (tail.isEmpty()) return "";
+                      String last = tail.peekLast();
+                      if (last == null || last.startsWith("info ")) return "";
+                      return " · " + last;
+                  }
               }
 
               private String exitSuffix() {
                   try {
-                      if (process != null && !process.isAlive()) return " (exit=" + process.exitValue() + ")";
+                      Process p = process;
+                      if (p != null && !p.isAlive()) return " (exit=" + p.exitValue() + ")";
                   } catch (Throwable ignored) {}
                   long age = startedAtMs > 0 ? System.currentTimeMillis() - startedAtMs : 0;
                   return age > 0 ? " (运行 " + age + "ms)" : "";
@@ -251,16 +252,22 @@ jobs:
 
               private void drain() { lines.clear(); }
 
-              @Override public synchronized void close() { closeQuietly(); }
+              @Override public void close() { closeQuietly(); }
 
               private void closeQuietly() {
+                  synchronized (lifecycleLock) { closeQuietlyLocked(); }
+              }
+
+              private void closeQuietlyLocked() {
                   ready = false;
-                  try { if (writer != null && process != null && process.isAlive()) { writer.write("quit\n"); writer.flush(); } } catch (Throwable ignored) {}
+                  BufferedWriter w = writer;
+                  Process p = process;
+                  try { if (w != null && p != null && p.isAlive()) { w.write("quit\n"); w.flush(); } } catch (Throwable ignored) {}
                   try {
-                      if (process != null && process.isAlive()) {
-                          process.destroy();
-                          try { process.waitFor(450, TimeUnit.MILLISECONDS); } catch (Throwable ignored) {}
-                          if (process.isAlive()) process.destroyForcibly();
+                      if (p != null && p.isAlive()) {
+                          p.destroy();
+                          try { p.waitFor(300, TimeUnit.MILLISECONDS); } catch (Throwable ignored) {}
+                          if (p.isAlive()) p.destroyForcibly();
                       }
                   } catch (Throwable ignored) {}
                   writer = null;
@@ -279,7 +286,6 @@ jobs:
           import android.webkit.WebView;
           import org.json.JSONObject;
 
-          import java.util.concurrent.Future;
           import java.util.concurrent.LinkedBlockingQueue;
           import java.util.concurrent.ThreadPoolExecutor;
           import java.util.concurrent.TimeUnit;
@@ -291,7 +297,6 @@ jobs:
               private final ThreadPoolExecutor worker = new ThreadPoolExecutor(
                       1, 1, 0L, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>());
               private final AtomicInteger latestRequest = new AtomicInteger(-1);
-              private Future<?> running;
 
               EngineBridge(WebView webView, PikafishEngine engine) {
                   this.webView = webView;
@@ -299,21 +304,30 @@ jobs:
                   worker.execute(engine::warmUp);
               }
 
+              private void deliver(int requestId, PikafishEngine.Result r) {
+                  if (latestRequest.get() != requestId) return;
+                  String js = "window.onEngineResult(" + requestId + "," +
+                          JSONObject.quote(r.bestMove) + "," + r.scoreCp + "," + r.depth + "," +
+                          JSONObject.quote(r.error == null ? "" : r.error) + ")";
+                  webView.post(() -> {
+                      if (latestRequest.get() == requestId) webView.evaluateJavascript(js, null);
+                  });
+              }
+
+              @JavascriptInterface
+              public boolean isReady() {
+                  return engine.isReady();
+              }
+
               @JavascriptInterface
               public synchronized void analyze(String fen, int requestId, int moveTimeMs) {
                   latestRequest.set(requestId);
+                  if (!engine.isReady()) {
+                      deliver(requestId, PikafishEngine.Result.err("Pikafish 尚未就绪"));
+                      return;
+                  }
                   worker.getQueue().clear();
-
-                  running = worker.submit(() -> {
-                      PikafishEngine.Result r = engine.analyze(fen, moveTimeMs);
-                      if (latestRequest.get() != requestId) return;
-                      String js = "window.onEngineResult(" + requestId + "," +
-                              JSONObject.quote(r.bestMove) + "," + r.scoreCp + "," + r.depth + "," +
-                              JSONObject.quote(r.error == null ? "" : r.error) + ")";
-                      webView.post(() -> {
-                          if (latestRequest.get() == requestId) webView.evaluateJavascript(js, null);
-                      });
-                  });
+                  worker.submit(() -> deliver(requestId, engine.analyze(fen, moveTimeMs)));
               }
 
               @JavascriptInterface
@@ -327,7 +341,7 @@ jobs:
 
               @JavascriptInterface
               public synchronized void warmUp() {
-                  if (running == null || running.isDone()) worker.execute(engine::warmUp);
+                  if (!engine.isReady()) worker.execute(engine::warmUp);
               }
 
               void close() {
@@ -336,7 +350,6 @@ jobs:
                   engine.close();
               }
           }
-
           JAVA
 
           python - <<'PY'
@@ -354,24 +367,29 @@ jobs:
           python scripts/patch_v106.py
           python scripts/patch_v107.py
           python scripts/patch_v109.py
+          python scripts/patch_v110.py
 
-      - name: Validate v1.0.9 overlay and engine bridge
+      - name: Validate v1.0.10 hard-budget flow
         run: |
-          grep -q "xiangqi_v109_trusted_state" app/src/main/assets/overlay.html
-          grep -q "adaptiveThinkMs" app/src/main/assets/overlay.html
-          grep -q "enginePositionIssue" app/src/main/assets/overlay.html
-          grep -q "本次只重启一次" app/src/main/assets/overlay.html
-          grep -q "public synchronized void warmUp()" app/src/main/java/com/openai/xiangqiassist/EngineBridge.java
-          ! grep -q "running.cancel(true)" app/src/main/java/com/openai/xiangqiassist/EngineBridge.java
-          ! grep -q "probeReady" app/src/main/java/com/openai/xiangqiassist/PikafishEngine.java
+          grep -q "xiangqi_v110_trusted_state" app/src/main/assets/overlay.html
+          grep -q "boundedThinkMs" app/src/main/assets/overlay.html
+          grep -q "Pikafish 超过本步硬时限" app/src/main/assets/overlay.html
+          grep -q "public boolean isReady()" app/src/main/java/com/openai/xiangqiassist/EngineBridge.java
+          ! grep -q "synchronized Result analyze" app/src/main/java/com/openai/xiangqiassist/PikafishEngine.java
+          ! grep -q "private synchronized void remember" app/src/main/java/com/openai/xiangqiassist/PikafishEngine.java
           python - <<'PY'
           from pathlib import Path
           s=Path('app/src/main/assets/overlay.html').read_text()
           a=s.index("<script>")+8
           b=s.rindex("</script>")
-          Path("/tmp/overlay-v109.js").write_text(s[a:b])
+          Path("/tmp/overlay-v110.js").write_text(s[a:b])
+          j=Path('app/src/main/java/com/openai/xiangqiassist/PikafishEngine.java').read_text()
+          block=j[j.index('while ((line = br.readLine()) != null)'):j.index('} catch (IOException ignored)',j.index('while ((line = br.readLine()) != null)'))]
+          assert block.index('lines.offer(line)') < block.index('remember(line)'), block
+          assert 'for (int attempt' not in j
+          assert 'Math.min(4500, moveTimeMs)' in j
           PY
-          node --check /tmp/overlay-v109.js
+          node --check /tmp/overlay-v110.js
 
       - uses: actions/setup-java@v5
         with:
@@ -445,13 +463,18 @@ jobs:
           send("setoption name Hash value 32")
           send("setoption name EvalFile value "+net)
           send("isready"); wait_for("readyok",20)
-          fen="rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w - - 0 1"
-          send("position fen "+fen)
-          send("go movetime 350")
-          bm=wait_for("bestmove",12)
-          if len(bm.split())<2 or bm.split()[1]=="(none)":
-              raise SystemExit("No usable bestmove: "+bm)
-          print("ARM64 Pikafish smoke test OK:",bm)
+          fens=[
+              "rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w - - 0 1",
+              "rnbakabnr/9/1c5c1/p1p1p1p1p/9/2P6/P3P1P1P/1C5C1/9/RNBAKABNR b - - 0 1",
+              "r1bakabnr/4n4/1c5c1/p1p1p1p1p/9/2P6/P3P1P1P/1C2C4/9/RNBAKABNR w - - 0 1",
+          ]
+          for i,fen in enumerate(fens,1):
+              send("position fen "+fen)
+              send("go movetime 350")
+              bm=wait_for("bestmove",12)
+              if len(bm.split())<2 or bm.split()[1]=="(none)":
+                  raise SystemExit("No usable bestmove on search %d: %s"%(i,bm))
+              print("ARM64 Pikafish sequential search %d OK:"%i,bm)
           send("quit")
           try: p.wait(timeout=3)
           except subprocess.TimeoutExpired: p.kill()
@@ -469,24 +492,24 @@ jobs:
           BT="$ANDROID_HOME/build-tools/35.0.0"
           IN=app/build/outputs/apk/release/app-release-unsigned.apk
           ALIGNED=app-release-aligned.apk
-          OUT=xiangqi-assistant-v1.0.9-stable.apk
+          OUT=xiangqi-assistant-v1.0.10-hard-budget.apk
           "$BT/zipalign" -p -f 4 "$IN" "$ALIGNED"
-          keytool -genkeypair -v -keystore release.keystore -storepass changeit -keypass changeit -alias xiangqi-v109 -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Xiangqi Assistant v1.0.9,O=Local Build,C=US"
-          "$BT/apksigner" sign --ks release.keystore --ks-key-alias xiangqi-v109 --ks-pass pass:changeit --key-pass pass:changeit --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true --v4-signing-enabled false --out "$OUT" "$ALIGNED"
+          keytool -genkeypair -v -keystore release.keystore -storepass changeit -keypass changeit -alias xiangqi-v110 -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Xiangqi Assistant v1.0.10,O=Local Build,C=US"
+          "$BT/apksigner" sign --ks release.keystore --ks-key-alias xiangqi-v110 --ks-pass pass:changeit --key-pass pass:changeit --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true --v4-signing-enabled false --out "$OUT" "$ALIGNED"
           unzip -t "$OUT"
           unzip -l "$OUT" | grep 'lib/arm64-v8a/libpikafish.so'
           unzip -l "$OUT" | grep 'assets/pikafish.nnue'
           "$BT/apksigner" verify --verbose --print-certs "$OUT" | tee apk-signature.txt
           "$BT/aapt2" dump badging "$OUT" | tee apk-badging.txt
-          grep "package: name='com.openai.xiangqiassist.v109'" apk-badging.txt
-          grep "versionCode='109'" apk-badging.txt
+          grep "package: name='com.openai.xiangqiassist.v110'" apk-badging.txt
+          grep "versionCode='110'" apk-badging.txt
           sha256sum "$OUT" | tee apk-sha256.txt
 
       - uses: actions/upload-artifact@v4
         with:
-          name: xiangqi-assistant-v1.0.9-stable-apk
+          name: xiangqi-assistant-v1.0.10-hard-budget-apk
           path: |
-            xiangqi-assistant-v1.0.9-stable.apk
+            xiangqi-assistant-v1.0.10-hard-budget.apk
             apk-sha256.txt
             apk-badging.txt
             apk-signature.txt
