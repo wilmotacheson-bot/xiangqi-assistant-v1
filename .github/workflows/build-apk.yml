@@ -29,17 +29,16 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
-          import re
 
           j=Path('app/src/main/java/com/openai/xiangqiassist/ChessAccessibilityService.java')
-          s=j.read_text()
-          s=s.replace('private static final long CAPTURE_MS = 450L;', 'private static final long CAPTURE_MS = 300L;')
+          s=j.read_text().replace('private static final long CAPTURE_MS = 450L;',
+                                  'private static final long CAPTURE_MS = 300L;')
           j.write_text(s)
 
           p=Path('app/src/main/assets/overlay.html')
           s=p.read_text()
           s=s.replace("let pulseA=0,pulseB=0,scanGap=false,lastVisibleAt=0;",
-                      "const STABLE_REQUIRED=3,TRANSIENT_HOLD_MS=700;\\nlet pulseA=0,pulseB=0,scanGap=false,lastVisibleAt=0,transientUntil=0,syncFailures=0;")
+                      "const STABLE_REQUIRED=3,TRANSIENT_HOLD_MS=700;\nlet pulseA=0,pulseB=0,scanGap=false,lastVisibleAt=0,transientUntil=0,syncFailures=0;")
           s=s.replace("if(sc<=2)matches.push(it);next.push(it);",
                       "if(sc===0)matches.push(it);if(sc<=Math.max(8,2*(maxDepth-depth)+2))next.push(it);")
           s=s.replace("if(keep.length>=160)break","if(keep.length>=260)break")
@@ -47,9 +46,9 @@ jobs:
                       "function reconcileExact(prev,next,preferredRed,maxDepth=6)")
           s=s.replace("frontier=nx.slice(0,220).map(x=>x.it)","frontier=nx.slice(0,360).map(x=>x.it)")
 
-          a=s.index("let fullStableKey='',fullStableCount=0,untrackedFrames=0;")
-          b=s.index("window.onCaptureError=function",a)
-          stable=r'''let fullStableKey='',fullStableCount=0,untrackedFrames=0;
+          x=s.index("let fullStableKey='',fullStableCount=0,untrackedFrames=0;")
+          y=s.index("window.onCaptureError=function",x)
+          stable="""let fullStableKey='',fullStableCount=0,untrackedFrames=0;
           function holdForTransient(mainText,subText){
             transientUntil=Date.now()+TRANSIENT_HOLD_MS;fullStableKey='';fullStableCount=0;clearArrow();hint=null;
             if(mainText)showStatus(mainText,subText||'等待动画/高亮结束后自动重扫');
@@ -59,9 +58,9 @@ jobs:
             if(rec.selected){holdForTransient('已检测到棋子选中','等待落子或选中动画结束后自动重扫');return}
             if(Date.now()<transientUntil){clearArrow();showStatus('正在等待棋面稳定','动画结束后会自动连续确认 3 帧');return}
             const key=hashBoard(rec.b);if(key===fullStableKey)fullStableCount++;else{fullStableKey=key;fullStableCount=1}
-            if(fullStableCount<STABLE_REQUIRED){clearArrow();showStatus('棋盘已识别',\`稳定确认 \${fullStableCount}/\${STABLE_REQUIRED} · 避免动画误判\`);return}
+            if(fullStableCount<STABLE_REQUIRED){clearArrow();showStatus('棋盘已识别','稳定确认 '+fullStableCount+'/'+STABLE_REQUIRED+' · 避免动画误判');return}
             lastOcc=rec.occ.slice();lastSide=rec.side.slice();misses=0;
-            if(!currentBoard){currentBoard=rec.b.slice();currentHash=key;turn='me';untrackedFrames=0;syncFailures=0;showStatus('棋盘已锁定',\`完整识别 \${currentBoard.filter(Boolean).length} 枚棋子 · 正在计算\`);setTimeout(analyzeCurrent,50);return}
+            if(!currentBoard){currentBoard=rec.b.slice();currentHash=key;turn='me';untrackedFrames=0;syncFailures=0;showStatus('棋盘已锁定','完整识别 '+currentBoard.filter(Boolean).length+' 枚棋子 · 正在计算');setTimeout(analyzeCurrent,50);return}
             if(boardsEqual(currentBoard,rec.b)){untrackedFrames=0;syncFailures=0;if(turn==='me'){if(hint)drawMove(hint.m);else if(!analysisRunning)setTimeout(analyzeCurrent,20)}else showStatus('等待对方走棋','棋面稳定，未发现新的合法变化');return}
             hint=null;clearArrow();showStatus('棋面已变化','正在用占位/阵营 + 合法着法自动同步…');
             const preferred=turn==='me'?userRed:!userRed;
@@ -70,21 +69,22 @@ jobs:
             if(!sync){
               untrackedFrames++;syncFailures++;
               transientUntil=Date.now()+350;fullStableKey='';fullStableCount=0;
-              showStatus('正在自动重扫当前棋面',\`未找到唯一合法路径 · 第 \${syncFailures} 次重试；不会采用可疑局面\`);
+              showStatus('正在自动重扫当前棋面','未找到唯一合法路径 · 第 '+syncFailures+' 次重试；不会采用可疑局面');
               return
             }
             currentBoard=sync.b.slice();currentHash=hashBoard(currentBoard);untrackedFrames=0;syncFailures=0;turn=sync.red===userRed?'me':'opp';
-            if(turn==='me'){showStatus('已同步到当前局面',sync.seq.length>1?\`一次追赶 \${sync.seq.length} 手 · 正在计算\`:'检测到对方走棋 · 正在计算');setTimeout(analyzeCurrent,40)}
-            else showStatus('已检测到你的落子',sync.seq.length>1?\`一次追赶 \${sync.seq.length} 手 · 等待对方\`:'等待对方走棋');
+            if(turn==='me'){showStatus('已同步到当前局面',sync.seq.length>1?'一次追赶 '+sync.seq.length+' 手 · 正在计算':'检测到对方走棋 · 正在计算');setTimeout(analyzeCurrent,40)}
+            else showStatus('已检测到你的落子',sync.seq.length>1?'一次追赶 '+sync.seq.length+' 手 · 等待对方':'等待对方走棋');
           }
-          function handleNoBoard(msg){misses++;holdForTransient(msg||'正在寻找木纹棋盘…',\`已收到 \${frameSeen} 帧 · 等待画面恢复\`);if(misses>=40){currentBoard=null;currentHash='';turn='me';untrackedFrames=0;syncFailures=0}}
-          '''
-          s=s[:a]+stable+s[b:]
+          function handleNoBoard(msg){misses++;holdForTransient(msg||'正在寻找木纹棋盘…','已收到 '+frameSeen+' 帧 · 等待画面恢复');if(misses>=40){currentBoard=null;currentHash='';turn='me';untrackedFrames=0;syncFailures=0}}
+          """
+          s=s[:x]+stable+s[y:]
 
-          old="window.onFrame=function(dataUrl,w,h){if(busy)return;busy=true;frameSeen++;lastFrameAt=Date.now();screenW=w||1;screenH=h||1;const im=new Image();im.onload=()=>{try{C.width=screenW;C.height=screenH;ctx.clearRect(0,0,C.width,C.height);ctx.drawImage(im,0,0,screenW,screenH,0,0,screenW,screenH);const rec=recognize(true);if(!rec){handleNoBoard('未识别到木纹棋盘');return}if(rec.unknown&&!rec.b){clearArrow();showStatus('棋子识别不够确定',\`第 \${frameSeen} 帧 · 占位 \${rec.occCount??'?'} · 字形 \${rec.found} 枚\`);return}if(rec.invalid||!rec.b){clearArrow();showStatus('棋盘局面校验未通过',\`第 \${frameSeen} 帧 · 等待动画/高亮结束\`);return}status.style.display='block';acceptStable(rec)}finally{busy=false}};im.onerror=()=>{busy=false;showStatus('屏幕帧读取失败',\`第 \${frameSeen} 帧\`)};im.src=dataUrl};"
-          new="window.onFrame=function(dataUrl,w,h){if(busy)return;busy=true;frameSeen++;lastFrameAt=Date.now();screenW=w||1;screenH=h||1;const im=new Image();im.onload=()=>{try{C.width=screenW;C.height=screenH;ctx.clearRect(0,0,C.width,C.height);ctx.drawImage(im,0,0,screenW,screenH,0,0,screenW,screenH);const rec=recognize(true);if(!rec){handleNoBoard('未识别到木纹棋盘');return}if(rec.unknown&&!rec.b){holdForTransient('棋子识别不够确定',\`第 \${frameSeen} 帧 · 占位 \${rec.occCount??'?'} · 字形 \${rec.found} 枚\`);return}if(rec.invalid||!rec.b){holdForTransient('检测到动画/遮挡','棋盘局面暂不可信 · 700ms 后自动重扫');return}status.style.display='block';acceptStable(rec)}finally{busy=false}};im.onerror=()=>{busy=false;holdForTransient('屏幕帧读取失败',\`第 \${frameSeen} 帧\`)};im.src=dataUrl};"
-          if old not in s: raise SystemExit('old onFrame block not found')
-          s=s.replace(old,new)
+          x=s.index("window.onFrame=function")
+          y=s.index("showStatus('象棋助手 v1 已启动'",x)
+          onframe="""window.onFrame=function(dataUrl,w,h){if(busy)return;busy=true;frameSeen++;lastFrameAt=Date.now();screenW=w||1;screenH=h||1;const im=new Image();im.onload=()=>{try{C.width=screenW;C.height=screenH;ctx.clearRect(0,0,C.width,C.height);ctx.drawImage(im,0,0,screenW,screenH,0,0,screenW,screenH);const rec=recognize(true);if(!rec){handleNoBoard('未识别到木纹棋盘');return}if(rec.unknown&&!rec.b){holdForTransient('棋子识别不够确定','第 '+frameSeen+' 帧 · 占位 '+(rec.occCount??'?')+' · 字形 '+rec.found+' 枚');return}if(rec.invalid||!rec.b){holdForTransient('检测到动画/遮挡','棋盘局面暂不可信 · 700ms 后自动重扫');return}status.style.display='block';acceptStable(rec)}finally{busy=false}};im.onerror=()=>{busy=false;holdForTransient('屏幕帧读取失败','第 '+frameSeen+' 帧')};im.src=dataUrl};
+          """
+          s=s[:x]+onframe+s[y:]
           s=s.replace("showStatus('象棋助手 v1 已启动','AccessibilityService 截目标窗口 · 正在寻找木纹棋盘…');",
                       "showStatus('象棋助手 v1.0.2 稳定版已启动','抗吃子动画 · 3 帧稳定确认 · 自动重扫');")
           p.write_text(s)
