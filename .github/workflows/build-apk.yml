@@ -14,7 +14,7 @@ jobs:
 
       - name: Expand v1.0.4 source
         run: |
-          cat source_v104/chunk_00.b64 source_v104/chunk_01.b64 source_v104/chunk_02.b64 source_v104/chunk_03.b64 source_v104/chunk_04.b64 source_v104/chunk_05.b64 source_v104/chunk_06.b64 | base64 -d > xiangqi-project-src-v104.zip
+          cat source_v104/chunk_00a.b64 source_v104/chunk_00b.b64 source_v104/chunk_01.b64 source_v104/chunk_02.b64 source_v104/chunk_03.b64 source_v104/chunk_04.b64 source_v104/chunk_05.b64 source_v104/chunk_06.b64 | base64 -d > xiangqi-project-src-v104.zip
           echo "1a284d8c74122a3c53f3b8c2780c90690333a88b00420a57e74294be178a4e94  xiangqi-project-src-v104.zip" | sha256sum -c -
           unzip -t xiangqi-project-src-v104.zip
           unzip -o xiangqi-project-src-v104.zip -d .
@@ -22,6 +22,16 @@ jobs:
           test -f app/src/main/assets/overlay.html
           test -f app/src/main/java/com/openai/xiangqiassist/ChessAccessibilityService.java
           sed -i "s/applicationId 'com.openai.xiangqiassist.compat'/applicationId 'com.openai.xiangqiassist.autoturn'/" app/build.gradle
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('app/src/main/assets/overlay.html')
+          s=p.read_text()
+          old="const legalNow=legalMoves(currentBoard,userRed).some(x=>x.from===m.from&&x.to===m.to);if(!legalNow){showStatus('已丢弃非法引擎结果',\`Pikafish: \${er.best}\`);return}hint={m,score:er.score,depth:er.depth};"
+          new="const legalNow=legalMoves(currentBoard,userRed).some(x=>x.from===m.from&&x.to===m.to);if(!legalNow){showStatus('已丢弃非法引擎结果',\`Pikafish: \${er.best}\`);return}if(!hintFitsObserved(m)){currentBoard=null;currentHash='';turn='unknown';hint=null;clearArrow();showStatus('检测到内部局面与画面不一致','已阻止错误箭头 · 下一帧按将/帅方位和白圈重新同步');return}hint={m,score:er.score,depth:er.depth};"
+          if old not in s:
+              raise SystemExit('arrow guard insertion point missing')
+          p.write_text(s.replace(old,new))
+          PY
 
       - uses: actions/setup-java@v5
         with:
