@@ -1,4 +1,4 @@
-name: Build Xiangqi Assistant v1.0.14 Manual Takeover
+name: Build Xiangqi Assistant v1.0.15 Check Latch
 
 on:
   workflow_dispatch:
@@ -19,10 +19,10 @@ jobs:
           unzip -t baseline.zip
           rm -rf app
           unzip -o baseline.zip -d .
-          sed -i "s/applicationId 'com.openai.xiangqiassist.compat'/applicationId 'com.openai.xiangqiassist.v114'/" app/build.gradle
-          sed -E -i "s/versionCode [0-9]+/versionCode 114/" app/build.gradle
-          sed -E -i "s/versionName '[^']+'/versionName '1.0.14-manual-takeover'/" app/build.gradle
-          sed -i 's/android:label="象棋助手 v1"/android:label="象棋助手 1.0.14 手动接管版"/' app/src/main/AndroidManifest.xml
+          sed -i "s/applicationId 'com.openai.xiangqiassist.compat'/applicationId 'com.openai.xiangqiassist.v115'/" app/build.gradle
+          sed -E -i "s/versionCode [0-9]+/versionCode 115/" app/build.gradle
+          sed -E -i "s/versionName '[^']+'/versionName '1.0.15-check-latch'/" app/build.gradle
+          sed -i 's/android:label="象棋助手 v1"/android:label="象棋助手 1.0.15 将军提示稳定版"/' app/src/main/AndroidManifest.xml
 
       - name: Patch resilient Pikafish runtime
         run: |
@@ -373,49 +373,36 @@ jobs:
           python scripts/patch_v113.py
           python scripts/patch_v113_java.py
           python scripts/patch_v114.py
+          python scripts/patch_v115.py
 
-      - name: Validate v1.0.14 manual takeover button
+      - name: Validate v1.0.15 check-state latch
         run: |
           python - <<'PY'
           from pathlib import Path
           svc=Path('app/src/main/java/com/openai/xiangqiassist/ChessAccessibilityService.java').read_text()
           eb=Path('app/src/main/java/com/openai/xiangqiassist/EngineBridge.java').read_text()
           ov=Path('app/src/main/assets/overlay.html').read_text()
-
           checks = {
-              "manual button label": "↻ 新局 / 接管" in svc,
-              "manual reset method": "startFreshSessionFromOverlay" in svc,
-              "button overlay method": "ensureSessionButton" in svc,
-              "touchable button": "MotionEvent.ACTION_MOVE" in svc and "sessionButton.setOnClickListener(v -> startFreshSessionFromOverlay())" in svc,
-              "manual session id": "putLong(MainActivity.KEY_SESSION, session)" in svc,
-              "accessibility reconnect session": "reconnectSession = System.currentTimeMillis()" in svc and "putLong(MainActivity.KEY_SESSION, reconnectSession)" in svc,
-              "reconnect invalidates loaded session": "loadedSession = Long.MIN_VALUE" in svc,
-              "native newSession": "engineBridge.newSession()" in svc,
-              "engine generation isolation": "generation.incrementAndGet()" in eb and "generation.get() != gen" in eb,
-              "public newSession": "public synchronized void newSession()" in eb,
+              "manual button": "↻ 新局 / 接管" in svc,
+              "accessibility reconnect reset": "putLong(MainActivity.KEY_SESSION, reconnectSession)" in svc,
+              "engine session isolation": "generation.incrementAndGet()" in eb,
+              "check latch variable": "let checkHandledHash=''" in ov,
+              "same-position latch": "checkHandledHash!==checkHash" in ov,
+              "same-position keeps hint": "else if(hint)" in ov and "drawMove(hint.m)" in ov,
+              "single move check latch": "checkHandledHash=currentHash" in ov,
               "no green-frame turn logic": "function detectUiTurn(){return null}" in ov,
-              "global midgame solver": "solveGlobalBoard" in ov,
-              "locked orientation": "frameFlip=flipped" in ov,
-              "v114 title": "象棋助手 1.0.14 手动接管版" in ov,
+              "global solver retained": "solveGlobalBoard" in ov,
+              "locked orientation retained": "frameFlip=flipped" in ov,
+              "v115 title": "象棋助手 1.0.15 将军提示稳定版" in ov,
           }
           failed=[k for k,v in checks.items() if not v]
-          for k,v in checks.items():
-              print(("OK  " if v else "FAIL")+" "+k)
-          if failed:
-              raise SystemExit("Validation failed: "+", ".join(failed))
-
-          assert 'FLAG_NOT_TOUCHABLE' in svc
-          i=svc.index('sessionButtonLp = new WindowManager.LayoutParams')
-          j=svc.index('sessionButtonLp.gravity',i)
-          assert 'FLAG_NOT_TOUCHABLE' not in svc[i:j], "manual button accidentally not touchable"
-          assert 'sessionButton.setVisibility(View.INVISIBLE)' in svc
-          assert 'sessionButton.setVisibility(View.VISIBLE)' in svc
-
+          for k,v in checks.items(): print(("OK  " if v else "FAIL")+" "+k)
+          if failed: raise SystemExit("Validation failed: "+", ".join(failed))
           a=ov.index("<script>")+8
           b=ov.rindex("</script>")
-          Path("/tmp/overlay-v114.js").write_text(ov[a:b])
+          Path("/tmp/overlay-v115.js").write_text(ov[a:b])
           PY
-          node --check /tmp/overlay-v114.js
+          node --check /tmp/overlay-v115.js
 
       - uses: actions/setup-java@v5
         with:
@@ -518,24 +505,24 @@ jobs:
           BT="$ANDROID_HOME/build-tools/35.0.0"
           IN=app/build/outputs/apk/release/app-release-unsigned.apk
           ALIGNED=app-release-aligned.apk
-          OUT=xiangqi-assistant-v1.0.14-manual-takeover.apk
+          OUT=xiangqi-assistant-v1.0.15-check-latch.apk
           "$BT/zipalign" -p -f 4 "$IN" "$ALIGNED"
-          keytool -genkeypair -v -keystore release.keystore -storepass changeit -keypass changeit -alias xiangqi-v114 -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Xiangqi Assistant v1.0.14,O=Local Build,C=US"
-          "$BT/apksigner" sign --ks release.keystore --ks-key-alias xiangqi-v114 --ks-pass pass:changeit --key-pass pass:changeit --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true --v4-signing-enabled false --out "$OUT" "$ALIGNED"
+          keytool -genkeypair -v -keystore release.keystore -storepass changeit -keypass changeit -alias xiangqi-v115 -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Xiangqi Assistant v1.0.15,O=Local Build,C=US"
+          "$BT/apksigner" sign --ks release.keystore --ks-key-alias xiangqi-v115 --ks-pass pass:changeit --key-pass pass:changeit --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true --v4-signing-enabled false --out "$OUT" "$ALIGNED"
           unzip -t "$OUT"
           unzip -l "$OUT" | grep 'lib/arm64-v8a/libpikafish.so'
           unzip -l "$OUT" | grep 'assets/pikafish.nnue'
           "$BT/apksigner" verify --verbose --print-certs "$OUT" | tee apk-signature.txt
           "$BT/aapt2" dump badging "$OUT" | tee apk-badging.txt
-          grep "package: name='com.openai.xiangqiassist.v114'" apk-badging.txt
-          grep "versionCode='114'" apk-badging.txt
+          grep "package: name='com.openai.xiangqiassist.v115'" apk-badging.txt
+          grep "versionCode='115'" apk-badging.txt
           sha256sum "$OUT" | tee apk-sha256.txt
 
       - uses: actions/upload-artifact@v4
         with:
-          name: xiangqi-assistant-v1.0.14-manual-takeover-apk
+          name: xiangqi-assistant-v1.0.15-check-latch-apk
           path: |
-            xiangqi-assistant-v1.0.14-manual-takeover.apk
+            xiangqi-assistant-v1.0.15-check-latch.apk
             apk-sha256.txt
             apk-badging.txt
             apk-signature.txt
