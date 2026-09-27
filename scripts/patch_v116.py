@@ -8,9 +8,9 @@ s=p.read_text()
 # 1) normalized high-resolution glyph descriptors,
 # 2) per-device templates learned from a certain standard starting position,
 # 3) strict ambiguity rejection instead of forced guessing.
-pat=r"""function glyphVector\(cx,cy,r,isR\)\{.*?\}\nfunction sim\(a,b\)\{.*?\}\nfunction classify\(cx,cy,r,isR\)\{.*?\}"""
-m=re.search(pat,s,re.S)
-if not m:
+start=s.find('function glyphVector(cx,cy,r,isR)')
+end=s.find('\nfunction countPieces',start)
+if start<0 or end<0:
     raise SystemExit('old glyph classifier block missing')
 
 new=r"""const GLYPH_BANK_KEY='xiangqi_fixedskin_glyphbank_v3';
@@ -28,7 +28,7 @@ function bankScore(desc,p){if(!glyphBank||!glyphBank.samples[p]||!glyphBank.samp
 function classify(cx,cy,r,isR){const lo=glyphVector(cx,cy,r,isR),hi=glyphDescriptor(cx,cy,r,isR),cand=isR?['K','A','B','N','R','C','P']:['k','a','b','n','r','c','p'],ready=glyphBankReady(),scores=[];for(const p of cand){const base=sim(lo,TM[p]),bs=ready?bankScore(hi,p):-1,s=bs>=0?.84*bs+.16*base:base;scores.push({p,s,base,bank:bs})}scores.sort((a,b)=>b.s-a.s);return{p:scores[0].p,s:scores[0].s,margin:scores[0].s-scores[1].s,scores,calibrated:ready,energy:hi.energy}}
 function learnGlyphBankFromStart(rawOcc,rawSide,r){try{if(!rawOcc||!rawSide||!crop)return false;if(glyphBank&&glyphBank.lastSession===SESSION_ID)return false;let diff=0,bR=0,bB=0;for(let i=0;i<90;i++){if(!!rawOcc[i]!==!!START_OCC[i])diff++;if(i>=45){if(rawSide[i]==='R')bR++;else if(rawSide[i]==='B')bB++}}if(diff>1||bR+bB<12)return false;const screenFlip=bB>bR,dx=crop.w/8,dy=crop.h/9,samples={};let captured=0;for(let i=0;i<90;i++){if(!rawOcc[i])continue;const j=screenFlip?89-i:i,p=START_BOARD[j];if(!p)continue;const expect=isRed(p)?'R':'B';if(rawSide[i]&&rawSide[i]!==expect)return false;const x=i%9,y=(i/9)|0,desc=glyphDescriptor(crop.x+x*dx,crop.y+y*dy,r,isRed(p));if(desc.energy<5)return false;(samples[p]||(samples[p]=[])).push(desc.v.map(v=>Math.max(0,Math.min(255,Math.round(v*255)))));captured++}const all=['K','A','B','N','R','C','P','k','a','b','n','r','c','p'];if(captured<30||!all.every(p=>samples[p]&&samples[p].length))return false;glyphBank={version:3,samples,lastSession:SESSION_ID,trainedAt:Date.now(),screen:[screenW,screenH]};saveGlyphBank();return true}catch(_){return false}}
 function strictIdentityBoardOK(b,cands){if(!glyphBankReady())return true;for(let i=0;i<90;i++){const p=b[i];if(!p)continue;const arr=(cands[i]||[]).filter(q=>exactStaticSquareOK(q.p,i));if(!arr.length)return false;const mine=arr.find(q=>q.p===p);if(!mine||mine.s<.64)return false;const top=arr[0],second=arr[1];if(top&&top.p!==p&&top.s-mine.s>.028)return false;if(top&&top.p===p&&second&&top.s-second.s<.012&&top.s<.80)return false}return true}"""
-s=s[:m.start()]+new+s[m.end():]
+s=s[:start]+new+s[end:]
 
 old="const cl=classify(cx,cy,r,isR);cands[i]=cl.scores;if(cl.s<.42){unknown++;continue}next[i]=cl.p;found++;confidence+=cl.s"
 new2="const cl=classify(cx,cy,r,isR);cands[i]=cl.scores;const minS=cl.calibrated?.64:.42,minM=cl.calibrated?.010:-1;if(cl.s<minS||cl.margin<minM){unknown++;continue}next[i]=cl.p;found++;confidence+=cl.s"
