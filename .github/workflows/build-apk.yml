@@ -12,8 +12,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Expand source bundle
+      - name: Reconstruct and verify source bundle
         run: |
+          cat source/chunk_00.b64 source/chunk_01.b64 source/chunk_02.b64 source/chunk_03.b64 source/chunk_04.b64 source/chunk_05.b64 | base64 -d > xiangqi-project-src.zip
+          echo "9f3b9935ba01acb4e0b5d121f0598030bff638deb996ecf00fc1c4506e587811  xiangqi-project-src.zip" | sha256sum -c -
+          unzip -t xiangqi-project-src.zip
           unzip -o xiangqi-project-src.zip -d .
           test -f app/build.gradle
           test -f app/src/main/AndroidManifest.xml
@@ -45,7 +48,9 @@ jobs:
 
       - name: Download official Pikafish NNUE
         run: |
-          curl -fL --retry 3             https://github.com/official-pikafish/Networks/releases/download/master-net/pikafish.nnue             -o app/src/main/assets/pikafish.nnue
+          curl -fL --retry 3 \
+            https://github.com/official-pikafish/Networks/releases/download/master-net/pikafish.nnue \
+            -o app/src/main/assets/pikafish.nnue
           test "$(stat -c%s app/src/main/assets/pikafish.nnue)" -gt 1000000
           mkdir -p app/src/main/assets/licenses
           cp /tmp/Pikafish/Copying.txt app/src/main/assets/licenses/Pikafish-GPLv3.txt
