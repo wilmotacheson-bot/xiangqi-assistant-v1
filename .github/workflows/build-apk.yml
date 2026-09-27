@@ -428,7 +428,7 @@ jobs:
           OUT=xiangqi-assistant-v1.0.9-stable.apk
           "$BT/zipalign" -p -f 4 "$IN" "$ALIGNED"
           keytool -genkeypair -v -keystore release.keystore -storepass changeit -keypass changeit -alias xiangqi-v109 -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Xiangqi Assistant v1.0.9,O=Local Build,C=US"
-          "$BT/apksigner" sign --ks release.keystore --ks-key-alias xiangqi-v107 --ks-pass pass:changeit --key-pass pass:changeit --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true --v4-signing-enabled false --out "$OUT" "$ALIGNED"
+          "$BT/apksigner" sign --ks release.keystore --ks-key-alias xiangqi-v109 --ks-pass pass:changeit --key-pass pass:changeit --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true --v4-signing-enabled false --out "$OUT" "$ALIGNED"
           unzip -t "$OUT"
           unzip -l "$OUT" | grep 'lib/arm64-v8a/libpikafish.so'
           unzip -l "$OUT" | grep 'assets/pikafish.nnue'
