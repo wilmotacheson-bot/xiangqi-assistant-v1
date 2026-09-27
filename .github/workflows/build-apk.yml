@@ -1,0 +1,76 @@
+name: Build Xiangqi Assistant v1 APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Expand source bundle
+        run: |
+          unzip -o xiangqi-project-src.zip -d .
+          test -f app/build.gradle
+          test -f app/src/main/AndroidManifest.xml
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK + NDK
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platforms;android-35" "build-tools;35.0.0" "ndk;28.2.13676358"
+
+      - name: Build official Pikafish for Android arm64
+        run: |
+          git clone --depth 1 https://github.com/official-pikafish/Pikafish.git /tmp/Pikafish
+          export ANDROID_NDK_ROOT="$ANDROID_SDK_ROOT/ndk/28.2.13676358"
+          export ANDROID_NDK_BIN="$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          export PATH="$ANDROID_NDK_BIN:$PATH"
+          cd /tmp/Pikafish/src
+          make -j4 build ARCH=arm64-universal COMP=ndk EXE=libpikafish.so LDFLAGS="-static -Wno-unused-command-line-argument"
+          make strip ARCH=arm64-universal COMP=ndk EXE=libpikafish.so
+          mkdir -p "$GITHUB_WORKSPACE/app/src/main/jniLibs/arm64-v8a"
+          cp libpikafish.so "$GITHUB_WORKSPACE/app/src/main/jniLibs/arm64-v8a/libpikafish.so"
+          file "$GITHUB_WORKSPACE/app/src/main/jniLibs/arm64-v8a/libpikafish.so"
+
+      - name: Download official Pikafish NNUE
+        run: |
+          curl -fL --retry 3             https://github.com/official-pikafish/Networks/releases/download/master-net/pikafish.nnue             -o app/src/main/assets/pikafish.nnue
+          test "$(stat -c%s app/src/main/assets/pikafish.nnue)" -gt 1000000
+          mkdir -p app/src/main/assets/licenses
+          cp /tmp/Pikafish/Copying.txt app/src/main/assets/licenses/Pikafish-GPLv3.txt
+          printf '%s\n' 'Pikafish source: https://github.com/official-pikafish/Pikafish' > app/src/main/assets/licenses/Pikafish-source.txt
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+
+      - name: Build installable debug APK
+        run: gradle --no-daemon :app:assembleDebug
+
+      - name: Verify APK payload
+        run: |
+          APK=app/build/outputs/apk/debug/app-debug.apk
+          test -f "$APK"
+          unzip -l "$APK" | grep 'lib/arm64-v8a/libpikafish.so'
+          unzip -l "$APK" | grep 'assets/pikafish.nnue'
+          sha256sum "$APK" | tee apk-sha256.txt
+          cp "$APK" xiangqi-assistant-v1-debug.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: xiangqi-assistant-v1-apk
+          path: |
+            xiangqi-assistant-v1-debug.apk
+            apk-sha256.txt
+          if-no-files-found: error
