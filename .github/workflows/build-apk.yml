@@ -1,4 +1,4 @@
-name: Build Xiangqi Assistant v1.0.5 Engine Fix
+name: Build Xiangqi Assistant v1.0.6 Black Side Fix
 
 on:
   workflow_dispatch:
@@ -19,12 +19,10 @@ jobs:
           unzip -t baseline.zip
           rm -rf app
           unzip -o baseline.zip -d .
-          echo "DEBUG_OVERLAY_V106"
-          nl -ba app/src/main/assets/overlay.html | sed -n '1,190p'
-          sed -i "s/applicationId 'com.openai.xiangqiassist.compat'/applicationId 'com.openai.xiangqiassist.enginefix'/" app/build.gradle
-          sed -E -i "s/versionCode [0-9]+/versionCode 105/" app/build.gradle
-          sed -E -i "s/versionName '[^']+'/versionName '1.0.5-enginefix'/" app/build.gradle
-          sed -i 's/android:label="象棋助手 v1"/android:label="象棋助手 1.0.5 引擎自愈版"/' app/src/main/AndroidManifest.xml
+          sed -i "s/applicationId 'com.openai.xiangqiassist.compat'/applicationId 'com.openai.xiangqiassist.v106'/" app/build.gradle
+          sed -E -i "s/versionCode [0-9]+/versionCode 106/" app/build.gradle
+          sed -E -i "s/versionName '[^']+'/versionName '1.0.6-blackside'/" app/build.gradle
+          sed -i 's/android:label="象棋助手 v1"/android:label="象棋助手 1.0.6 黑方修复版"/' app/src/main/AndroidManifest.xml
 
       - name: Patch resilient Pikafish runtime
         run: |
@@ -409,24 +407,24 @@ jobs:
           BT="$ANDROID_HOME/build-tools/35.0.0"
           IN=app/build/outputs/apk/release/app-release-unsigned.apk
           ALIGNED=app-release-aligned.apk
-          OUT=xiangqi-assistant-v1.0.5-engine-selfheal.apk
+          OUT=xiangqi-assistant-v1.0.6-blackside.apk
           "$BT/zipalign" -p -f 4 "$IN" "$ALIGNED"
-          keytool -genkeypair -v -keystore release.keystore -storepass changeit -keypass changeit -alias xiangqi-v105 -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Xiangqi Assistant v1.0.5,O=Local Build,C=US"
-          "$BT/apksigner" sign --ks release.keystore --ks-key-alias xiangqi-v105 --ks-pass pass:changeit --key-pass pass:changeit --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true --v4-signing-enabled false --out "$OUT" "$ALIGNED"
+          keytool -genkeypair -v -keystore release.keystore -storepass changeit -keypass changeit -alias xiangqi-v106 -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Xiangqi Assistant v1.0.6,O=Local Build,C=US"
+          "$BT/apksigner" sign --ks release.keystore --ks-key-alias xiangqi-v106 --ks-pass pass:changeit --key-pass pass:changeit --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true --v4-signing-enabled false --out "$OUT" "$ALIGNED"
           unzip -t "$OUT"
           unzip -l "$OUT" | grep 'lib/arm64-v8a/libpikafish.so'
           unzip -l "$OUT" | grep 'assets/pikafish.nnue'
           "$BT/apksigner" verify --verbose --print-certs "$OUT" | tee apk-signature.txt
           "$BT/aapt2" dump badging "$OUT" | tee apk-badging.txt
-          grep "package: name='com.openai.xiangqiassist.enginefix'" apk-badging.txt
-          grep "versionCode='105'" apk-badging.txt
+          grep "package: name='com.openai.xiangqiassist.v106'" apk-badging.txt
+          grep "versionCode='106'" apk-badging.txt
           sha256sum "$OUT" | tee apk-sha256.txt
 
       - uses: actions/upload-artifact@v4
         with:
-          name: xiangqi-assistant-v1.0.5-engine-selfheal-apk
+          name: xiangqi-assistant-v1.0.6-blackside-apk
           path: |
-            xiangqi-assistant-v1.0.5-engine-selfheal.apk
+            xiangqi-assistant-v1.0.6-blackside.apk
             apk-sha256.txt
             apk-badging.txt
             apk-signature.txt
