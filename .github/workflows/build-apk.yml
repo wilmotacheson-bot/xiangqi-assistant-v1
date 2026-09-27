@@ -1,4 +1,4 @@
-name: Build Xiangqi Assistant v1.0.6 Black Side Fix
+name: Build Xiangqi Assistant v1.0.7 Five Second Strong Validation
 
 on:
   workflow_dispatch:
@@ -19,10 +19,10 @@ jobs:
           unzip -t baseline.zip
           rm -rf app
           unzip -o baseline.zip -d .
-          sed -i "s/applicationId 'com.openai.xiangqiassist.compat'/applicationId 'com.openai.xiangqiassist.v106'/" app/build.gradle
-          sed -E -i "s/versionCode [0-9]+/versionCode 106/" app/build.gradle
-          sed -E -i "s/versionName '[^']+'/versionName '1.0.6-blackside'/" app/build.gradle
-          sed -i 's/android:label="象棋助手 v1"/android:label="象棋助手 1.0.6 黑方修复版"/' app/src/main/AndroidManifest.xml
+          sed -i "s/applicationId 'com.openai.xiangqiassist.compat'/applicationId 'com.openai.xiangqiassist.v107'/" app/build.gradle
+          sed -E -i "s/versionCode [0-9]+/versionCode 107/" app/build.gradle
+          sed -E -i "s/versionName '[^']+'/versionName '1.0.7-five-sec'/" app/build.gradle
+          sed -i 's/android:label="象棋助手 v1"/android:label="象棋助手 1.0.7 五秒强校验版"/' app/src/main/AndroidManifest.xml
 
       - name: Patch resilient Pikafish runtime
         run: |
@@ -179,8 +179,8 @@ jobs:
 
                   send("uci");
                   if (!waitFor("uciok", 6000)) throw new IOException("启动等待 uciok 超时" + exitSuffix());
-                  send("setoption name Threads value 2");
-                  send("setoption name Hash value 48");
+                  send("setoption name Threads value 4");
+                  send("setoption name Hash value 96");
                   send("setoption name EvalFile value " + net.getAbsolutePath());
                   send("isready");
                   if (!waitFor("readyok", 12000)) throw new IOException("NNUE 加载/ready 超时" + exitSuffix());
@@ -355,6 +355,23 @@ jobs:
           p.write_text(s)
           PY
           python scripts/patch_v106.py
+          python scripts/patch_v107.py
+
+      - name: Validate v1.0.7 overlay logic
+        run: |
+          grep -q "AndroidEngine.analyze(boardToFen(pos,red),id,5000)" app/src/main/assets/overlay.html
+          grep -q "Pikafish 固定5秒" app/src/main/assets/overlay.html
+          grep -q "检测到对方将军" app/src/main/assets/overlay.html
+          grep -q "已拦截画面不一致推荐" app/src/main/assets/overlay.html
+          grep -q "restoreTrustedState" app/src/main/assets/overlay.html
+          python - <<'PY'
+          from pathlib import Path
+          s=Path('app/src/main/assets/overlay.html').read_text()
+          a=s.index("<script>")+8
+          b=s.rindex("</script>")
+          Path("/tmp/overlay-v107.js").write_text(s[a:b])
+          PY
+          node --check /tmp/overlay-v107.js
 
       - uses: actions/setup-java@v5
         with:
@@ -408,24 +425,24 @@ jobs:
           BT="$ANDROID_HOME/build-tools/35.0.0"
           IN=app/build/outputs/apk/release/app-release-unsigned.apk
           ALIGNED=app-release-aligned.apk
-          OUT=xiangqi-assistant-v1.0.6-blackside.apk
+          OUT=xiangqi-assistant-v1.0.7-five-sec.apk
           "$BT/zipalign" -p -f 4 "$IN" "$ALIGNED"
-          keytool -genkeypair -v -keystore release.keystore -storepass changeit -keypass changeit -alias xiangqi-v106 -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Xiangqi Assistant v1.0.6,O=Local Build,C=US"
-          "$BT/apksigner" sign --ks release.keystore --ks-key-alias xiangqi-v106 --ks-pass pass:changeit --key-pass pass:changeit --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true --v4-signing-enabled false --out "$OUT" "$ALIGNED"
+          keytool -genkeypair -v -keystore release.keystore -storepass changeit -keypass changeit -alias xiangqi-v107 -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Xiangqi Assistant v1.0.7,O=Local Build,C=US"
+          "$BT/apksigner" sign --ks release.keystore --ks-key-alias xiangqi-v107 --ks-pass pass:changeit --key-pass pass:changeit --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true --v4-signing-enabled false --out "$OUT" "$ALIGNED"
           unzip -t "$OUT"
           unzip -l "$OUT" | grep 'lib/arm64-v8a/libpikafish.so'
           unzip -l "$OUT" | grep 'assets/pikafish.nnue'
           "$BT/apksigner" verify --verbose --print-certs "$OUT" | tee apk-signature.txt
           "$BT/aapt2" dump badging "$OUT" | tee apk-badging.txt
-          grep "package: name='com.openai.xiangqiassist.v106'" apk-badging.txt
-          grep "versionCode='106'" apk-badging.txt
+          grep "package: name='com.openai.xiangqiassist.v107'" apk-badging.txt
+          grep "versionCode='107'" apk-badging.txt
           sha256sum "$OUT" | tee apk-sha256.txt
 
       - uses: actions/upload-artifact@v4
         with:
-          name: xiangqi-assistant-v1.0.6-blackside-apk
+          name: xiangqi-assistant-v1.0.7-five-sec-apk
           path: |
-            xiangqi-assistant-v1.0.6-blackside.apk
+            xiangqi-assistant-v1.0.7-five-sec.apk
             apk-sha256.txt
             apk-badging.txt
             apk-signature.txt
