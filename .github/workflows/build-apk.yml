@@ -20,8 +20,8 @@ jobs:
           rm -rf app
           unzip -o baseline.zip -d .
           sed -i "s/applicationId 'com.openai.xiangqiassist.compat'/applicationId 'com.openai.xiangqiassist.enginefix'/" app/build.gradle
-          sed -i "s/versionCode 101/versionCode 105/" app/build.gradle
-          sed -i "s/versionName '1.0.1-compat'/versionName '1.0.5-enginefix'/" app/build.gradle
+          sed -E -i "s/versionCode [0-9]+/versionCode 105/" app/build.gradle
+          sed -E -i "s/versionName '[^']+'/versionName '1.0.5-enginefix'/" app/build.gradle
           sed -i 's/android:label="象棋助手 v1"/android:label="象棋助手 1.0.5 引擎自愈版"/' app/src/main/AndroidManifest.xml
 
       - name: Patch resilient Pikafish runtime
