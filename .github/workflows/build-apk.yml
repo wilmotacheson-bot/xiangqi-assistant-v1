@@ -383,6 +383,8 @@ jobs:
           grep -q "FLAG_NOT_FOCUSABLE" app/src/main/java/com/openai/xiangqiassist/ChessAccessibilityService.java
           grep -q "MotionEvent.ACTION_MOVE" app/src/main/java/com/openai/xiangqiassist/ChessAccessibilityService.java
           grep -q "putLong(MainActivity.KEY_SESSION, session)" app/src/main/java/com/openai/xiangqiassist/ChessAccessibilityService.java
+          grep -q "reconnectSession = System.currentTimeMillis()" app/src/main/java/com/openai/xiangqiassist/ChessAccessibilityService.java
+          grep -q "putLong(MainActivity.KEY_SESSION, reconnectSession)" app/src/main/java/com/openai/xiangqiassist/ChessAccessibilityService.java
           grep -q "engineBridge.newSession()" app/src/main/java/com/openai/xiangqiassist/ChessAccessibilityService.java
           grep -q "@JavascriptInterface" app/src/main/java/com/openai/xiangqiassist/EngineBridge.java
           grep -q "public synchronized void newSession()" app/src/main/java/com/openai/xiangqiassist/EngineBridge.java
@@ -404,6 +406,8 @@ jobs:
           assert 'sessionButton.setVisibility(View.INVISIBLE)' in svc
           assert 'sessionButton.setVisibility(View.VISIBLE)' in svc
           assert 'engineBridge.newSession()' in svc
+          assert 'putLong(MainActivity.KEY_SESSION, reconnectSession)' in svc
+          assert 'loadedSession = Long.MIN_VALUE' in svc
           assert '@JavascriptInterface\n    public synchronized void newSession()' in eb
           a=ov.index("<script>")+8
           b=ov.rindex("</script>")
