@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 
 # MainActivity: every press of "开始实时分析" creates a brand-new session id.
 p=Path('app/src/main/java/com/openai/xiangqiassist/MainActivity.java')
