@@ -19,6 +19,8 @@ jobs:
           unzip -t baseline.zip
           rm -rf app
           unzip -o baseline.zip -d .
+          echo "DEBUG_OVERLAY_V106"
+          nl -ba app/src/main/assets/overlay.html | sed -n '1,190p'
           sed -i "s/applicationId 'com.openai.xiangqiassist.compat'/applicationId 'com.openai.xiangqiassist.enginefix'/" app/build.gradle
           sed -E -i "s/versionCode [0-9]+/versionCode 105/" app/build.gradle
           sed -E -i "s/versionName '[^']+'/versionName '1.0.5-enginefix'/" app/build.gradle
