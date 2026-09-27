@@ -1,4 +1,4 @@
-name: Build Xiangqi Assistant v1.0.10 Hard Budget
+name: Build Xiangqi Assistant v1.0.11 Black Midgame
 
 on:
   workflow_dispatch:
@@ -19,10 +19,10 @@ jobs:
           unzip -t baseline.zip
           rm -rf app
           unzip -o baseline.zip -d .
-          sed -i "s/applicationId 'com.openai.xiangqiassist.compat'/applicationId 'com.openai.xiangqiassist.v110'/" app/build.gradle
-          sed -E -i "s/versionCode [0-9]+/versionCode 110/" app/build.gradle
-          sed -E -i "s/versionName '[^']+'/versionName '1.0.10-hard-budget'/" app/build.gradle
-          sed -i 's/android:label="象棋助手 v1"/android:label="象棋助手 1.0.10 硬限时版"/' app/src/main/AndroidManifest.xml
+          sed -i "s/applicationId 'com.openai.xiangqiassist.compat'/applicationId 'com.openai.xiangqiassist.v111'/" app/build.gradle
+          sed -E -i "s/versionCode [0-9]+/versionCode 111/" app/build.gradle
+          sed -E -i "s/versionName '[^']+'/versionName '1.0.11-black-midgame'/" app/build.gradle
+          sed -i 's/android:label="象棋助手 v1"/android:label="象棋助手 1.0.11 黑方中途接管版"/' app/src/main/AndroidManifest.xml
 
       - name: Patch resilient Pikafish runtime
         run: |
@@ -368,28 +368,38 @@ jobs:
           python scripts/patch_v107.py
           python scripts/patch_v109.py
           python scripts/patch_v110.py
+          python scripts/patch_v111.py
 
-      - name: Validate v1.0.10 hard-budget flow
+      - name: Validate v1.0.11 black-side and midgame flow
         run: |
-          grep -q "xiangqi_v110_trusted_state" app/src/main/assets/overlay.html
-          grep -q "boundedThinkMs" app/src/main/assets/overlay.html
+          grep -q "xiangqi_v111_trusted_state" app/src/main/assets/overlay.html
+          grep -q "detectUiTurn" app/src/main/assets/overlay.html
+          grep -q "detectBottomCommanderQuick" app/src/main/assets/overlay.html
+          grep -q "检测到新对局/红黑换边" app/src/main/assets/overlay.html
+          grep -q "中途接管成功" app/src/main/assets/overlay.html
+          grep -q "requestEngineWarmUp" app/src/main/assets/overlay.html
+          grep -q "pollEngineRecovery(Date.now(),true)" app/src/main/assets/overlay.html
           grep -q "Pikafish 超过本步硬时限" app/src/main/assets/overlay.html
           grep -q "public boolean isReady()" app/src/main/java/com/openai/xiangqiassist/EngineBridge.java
           ! grep -q "synchronized Result analyze" app/src/main/java/com/openai/xiangqiassist/PikafishEngine.java
-          ! grep -q "private synchronized void remember" app/src/main/java/com/openai/xiangqiassist/PikafishEngine.java
           python - <<'PY'
           from pathlib import Path
           s=Path('app/src/main/assets/overlay.html').read_text()
           a=s.index("<script>")+8
           b=s.rindex("</script>")
-          Path("/tmp/overlay-v110.js").write_text(s[a:b])
+          js=s[a:b]
+          Path("/tmp/overlay-v111.js").write_text(js)
+          assert "bottomRed,uiTurn" in js
+          assert "uiTurn==='opp'?userRed:uiTurn==='me'?!userRed" in js
+          assert "untrackedFrames>=2" in js
+          assert "requestEngineWarmUp();showStatus('象棋助手 1.0.11" in js
           j=Path('app/src/main/java/com/openai/xiangqiassist/PikafishEngine.java').read_text()
           block=j[j.index('while ((line = br.readLine()) != null)'):j.index('} catch (IOException ignored)',j.index('while ((line = br.readLine()) != null)'))]
           assert block.index('lines.offer(line)') < block.index('remember(line)'), block
           assert 'for (int attempt' not in j
           assert 'Math.min(4500, moveTimeMs)' in j
           PY
-          node --check /tmp/overlay-v110.js
+          node --check /tmp/overlay-v111.js
 
       - uses: actions/setup-java@v5
         with:
@@ -492,24 +502,24 @@ jobs:
           BT="$ANDROID_HOME/build-tools/35.0.0"
           IN=app/build/outputs/apk/release/app-release-unsigned.apk
           ALIGNED=app-release-aligned.apk
-          OUT=xiangqi-assistant-v1.0.10-hard-budget.apk
+          OUT=xiangqi-assistant-v1.0.11-black-midgame.apk
           "$BT/zipalign" -p -f 4 "$IN" "$ALIGNED"
-          keytool -genkeypair -v -keystore release.keystore -storepass changeit -keypass changeit -alias xiangqi-v110 -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Xiangqi Assistant v1.0.10,O=Local Build,C=US"
-          "$BT/apksigner" sign --ks release.keystore --ks-key-alias xiangqi-v110 --ks-pass pass:changeit --key-pass pass:changeit --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true --v4-signing-enabled false --out "$OUT" "$ALIGNED"
+          keytool -genkeypair -v -keystore release.keystore -storepass changeit -keypass changeit -alias xiangqi-v111 -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Xiangqi Assistant v1.0.11,O=Local Build,C=US"
+          "$BT/apksigner" sign --ks release.keystore --ks-key-alias xiangqi-v111 --ks-pass pass:changeit --key-pass pass:changeit --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true --v4-signing-enabled false --out "$OUT" "$ALIGNED"
           unzip -t "$OUT"
           unzip -l "$OUT" | grep 'lib/arm64-v8a/libpikafish.so'
           unzip -l "$OUT" | grep 'assets/pikafish.nnue'
           "$BT/apksigner" verify --verbose --print-certs "$OUT" | tee apk-signature.txt
           "$BT/aapt2" dump badging "$OUT" | tee apk-badging.txt
-          grep "package: name='com.openai.xiangqiassist.v110'" apk-badging.txt
-          grep "versionCode='110'" apk-badging.txt
+          grep "package: name='com.openai.xiangqiassist.v111'" apk-badging.txt
+          grep "versionCode='111'" apk-badging.txt
           sha256sum "$OUT" | tee apk-sha256.txt
 
       - uses: actions/upload-artifact@v4
         with:
-          name: xiangqi-assistant-v1.0.10-hard-budget-apk
+          name: xiangqi-assistant-v1.0.11-black-midgame-apk
           path: |
-            xiangqi-assistant-v1.0.10-hard-budget.apk
+            xiangqi-assistant-v1.0.11-black-midgame.apk
             apk-sha256.txt
             apk-badging.txt
             apk-signature.txt
