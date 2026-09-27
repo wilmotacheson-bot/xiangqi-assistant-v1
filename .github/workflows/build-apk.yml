@@ -22,6 +22,7 @@ jobs:
           test -f app/src/main/assets/overlay.html
           test -f app/src/main/java/com/openai/xiangqiassist/ChessAccessibilityService.java
           sed -i "s/applicationId 'com.openai.xiangqiassist.compat'/applicationId 'com.openai.xiangqiassist.autoturn'/" app/build.gradle
+          sed -i 's/android:label="象棋助手 v1"/android:label="象棋助手 1.0.4 自动回合版"/' app/src/main/AndroidManifest.xml
           python - <<'PY'
           from pathlib import Path
           p=Path('app/src/main/assets/overlay.html')
