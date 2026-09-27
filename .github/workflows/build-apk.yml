@@ -354,6 +354,7 @@ jobs:
                       "showStatus('象棋助手 v1.0.5 引擎自愈版','Pikafish 已预热 · 卡死自动重启 · 自动识别红黑方/白圈');")
           p.write_text(s)
           PY
+          python scripts/patch_v106.py
 
       - uses: actions/setup-java@v5
         with:
