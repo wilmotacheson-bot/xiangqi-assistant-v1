@@ -20,6 +20,10 @@ jobs:
           unzip -o xiangqi-project-src.zip -d .
           test -f app/build.gradle
           test -f app/src/main/AndroidManifest.xml
+          sed -i "s/applicationId 'com.openai.xiangqiassist'/applicationId 'com.openai.xiangqiassist.compat'/" app/build.gradle
+          sed -i "s/versionCode 100/versionCode 101/" app/build.gradle
+          sed -i "s/versionName '1.0.0'/versionName '1.0.1-compat'/" app/build.gradle
+          sed -i 's/象棋助手 v1/象棋助手 v1 兼容版/' app/src/main/res/values/strings.xml
 
       - uses: actions/setup-java@v5
         with:
@@ -73,22 +77,37 @@ jobs:
         with:
           gradle-version: '8.10.2'
 
-      - name: Build installable debug APK
-        run: gradle --no-daemon :app:assembleDebug
+      - name: Build unsigned release APK
+        run: gradle --no-daemon :app:assembleRelease
 
-      - name: Verify APK payload
+      - name: Align and sign compatibility APK
         run: |
-          APK=app/build/outputs/apk/debug/app-debug.apk
-          test -f "$APK"
+          BT="$ANDROID_HOME/build-tools/35.0.0"
+          IN=app/build/outputs/apk/release/app-release-unsigned.apk
+          ALIGNED=app-release-aligned.apk
+          OUT=xiangqi-assistant-v1.0.1-compat.apk
+          test -f "$IN"
+          "$BT/zipalign" -p -f 4 "$IN" "$ALIGNED"
+          keytool -genkeypair -v             -keystore compat-release.keystore             -storepass changeit             -keypass changeit             -alias xiangqi-compat             -keyalg RSA -keysize 2048 -validity 10000             -dname "CN=Xiangqi Assistant Compat,O=OpenAI Build,C=US"
+          "$BT/apksigner" sign             --ks compat-release.keystore             --ks-key-alias xiangqi-compat             --ks-pass pass:changeit             --key-pass pass:changeit             --v1-signing-enabled true             --v2-signing-enabled true             --v3-signing-enabled true             --v4-signing-enabled false             --out "$OUT" "$ALIGNED"
+
+      - name: Verify final APK thoroughly
+        run: |
+          BT="$ANDROID_HOME/build-tools/35.0.0"
+          APK=xiangqi-assistant-v1.0.1-compat.apk
+          unzip -t "$APK"
           unzip -l "$APK" | grep 'lib/arm64-v8a/libpikafish.so'
           unzip -l "$APK" | grep 'assets/pikafish.nnue'
+          "$BT/apksigner" verify --verbose --print-certs "$APK"
+          "$BT/aapt2" dump badging "$APK" | tee apk-badging.txt
+          "$BT/aapt2" dump badging "$APK" | grep "package: name='com.openai.xiangqiassist.compat'"
           sha256sum "$APK" | tee apk-sha256.txt
-          cp "$APK" xiangqi-assistant-v1-debug.apk
 
       - uses: actions/upload-artifact@v4
         with:
-          name: xiangqi-assistant-v1-apk
+          name: xiangqi-assistant-v1.0.1-compat-apk
           path: |
-            xiangqi-assistant-v1-debug.apk
+            xiangqi-assistant-v1.0.1-compat.apk
             apk-sha256.txt
+            apk-badging.txt
           if-no-files-found: error
