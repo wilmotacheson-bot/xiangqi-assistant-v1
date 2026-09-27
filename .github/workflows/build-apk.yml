@@ -26,11 +26,11 @@ jobs:
           from pathlib import Path
           p=Path('app/src/main/assets/overlay.html')
           s=p.read_text()
-          old="const legalNow=legalMoves(currentBoard,userRed).some(x=>x.from===m.from&&x.to===m.to);if(!legalNow){showStatus('已丢弃非法引擎结果',\`Pikafish: \${er.best}\`);return}hint={m,score:er.score,depth:er.depth};"
-          new="const legalNow=legalMoves(currentBoard,userRed).some(x=>x.from===m.from&&x.to===m.to);if(!legalNow){showStatus('已丢弃非法引擎结果',\`Pikafish: \${er.best}\`);return}if(!hintFitsObserved(m)){currentBoard=null;currentHash='';turn='unknown';hint=null;clearArrow();showStatus('检测到内部局面与画面不一致','已阻止错误箭头 · 下一帧按将/帅方位和白圈重新同步');return}hint={m,score:er.score,depth:er.depth};"
-          if old not in s:
+          needle="hint={m,score:er.score,depth:er.depth};drawMove(m);"
+          replacement="if(!hintFitsObserved(m)){currentBoard=null;currentHash='';turn='unknown';hint=null;clearArrow();showStatus('检测到内部局面与画面不一致','已阻止错误箭头 · 下一帧按将/帅方位和白圈重新同步');return}hint={m,score:er.score,depth:er.depth};drawMove(m);"
+          if needle not in s:
               raise SystemExit('arrow guard insertion point missing')
-          p.write_text(s.replace(old,new))
+          p.write_text(s.replace(needle,replacement,1))
           PY
 
       - uses: actions/setup-java@v5
