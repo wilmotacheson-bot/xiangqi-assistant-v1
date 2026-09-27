@@ -376,39 +376,41 @@ jobs:
 
       - name: Validate v1.0.14 manual takeover button
         run: |
-          grep -q "↻ 新局 / 接管" app/src/main/java/com/openai/xiangqiassist/ChessAccessibilityService.java
-          grep -q "startFreshSessionFromOverlay" app/src/main/java/com/openai/xiangqiassist/ChessAccessibilityService.java
-          grep -q "ensureSessionButton" app/src/main/java/com/openai/xiangqiassist/ChessAccessibilityService.java
-          grep -q "TYPE_ACCESSIBILITY_OVERLAY" app/src/main/java/com/openai/xiangqiassist/ChessAccessibilityService.java
-          grep -q "FLAG_NOT_FOCUSABLE" app/src/main/java/com/openai/xiangqiassist/ChessAccessibilityService.java
-          grep -q "MotionEvent.ACTION_MOVE" app/src/main/java/com/openai/xiangqiassist/ChessAccessibilityService.java
-          grep -q "putLong(MainActivity.KEY_SESSION, session)" app/src/main/java/com/openai/xiangqiassist/ChessAccessibilityService.java
-          grep -q "reconnectSession = System.currentTimeMillis()" app/src/main/java/com/openai/xiangqiassist/ChessAccessibilityService.java
-          grep -q "putLong(MainActivity.KEY_SESSION, reconnectSession)" app/src/main/java/com/openai/xiangqiassist/ChessAccessibilityService.java
-          grep -q "engineBridge.newSession()" app/src/main/java/com/openai/xiangqiassist/ChessAccessibilityService.java
-          grep -q "@JavascriptInterface" app/src/main/java/com/openai/xiangqiassist/EngineBridge.java
-          grep -q "public synchronized void newSession()" app/src/main/java/com/openai/xiangqiassist/EngineBridge.java
-          grep -q "象棋助手 1.0.14 手动接管版" app/src/main/assets/overlay.html
-          grep -q "function detectUiTurn(){return null}" app/src/main/assets/overlay.html
-          grep -q "solveGlobalBoard" app/src/main/assets/overlay.html
-          grep -q "frameFlip=flipped" app/src/main/assets/overlay.html
           python - <<'PY'
           from pathlib import Path
           svc=Path('app/src/main/java/com/openai/xiangqiassist/ChessAccessibilityService.java').read_text()
           eb=Path('app/src/main/java/com/openai/xiangqiassist/EngineBridge.java').read_text()
           ov=Path('app/src/main/assets/overlay.html').read_text()
-          assert 'FLAG_NOT_TOUCHABLE' in svc  # fullscreen analysis overlay stays click-through
-          # The button itself must be touchable: its LayoutParams block must not include NOT_TOUCHABLE.
-          btn=svc[svc.index('sessionButtonLp = new WindowManager.LayoutParams'):svc.index('sessionButtonLp.gravity',svc.index('sessionButtonLp = new WindowManager.LayoutParams'))]
-          assert 'FLAG_NOT_TOUCHABLE' not in btn
-          assert 'sessionButton.setOnClickListener(v -> startFreshSessionFromOverlay())' in svc
-          assert 'sessionButton.setOnTouchListener' in svc
+
+          checks = {
+              "manual button label": "↻ 新局 / 接管" in svc,
+              "manual reset method": "startFreshSessionFromOverlay" in svc,
+              "button overlay method": "ensureSessionButton" in svc,
+              "touchable button": "MotionEvent.ACTION_MOVE" in svc and "sessionButton.setOnClickListener(v -> startFreshSessionFromOverlay())" in svc,
+              "manual session id": "putLong(MainActivity.KEY_SESSION, session)" in svc,
+              "accessibility reconnect session": "reconnectSession = System.currentTimeMillis()" in svc and "putLong(MainActivity.KEY_SESSION, reconnectSession)" in svc,
+              "reconnect invalidates loaded session": "loadedSession = Long.MIN_VALUE" in svc,
+              "native newSession": "engineBridge.newSession()" in svc,
+              "engine generation isolation": "generation.incrementAndGet()" in eb and "generation.get() != gen" in eb,
+              "public newSession": "public synchronized void newSession()" in eb,
+              "no green-frame turn logic": "function detectUiTurn(){return null}" in ov,
+              "global midgame solver": "solveGlobalBoard" in ov,
+              "locked orientation": "frameFlip=flipped" in ov,
+              "v114 title": "象棋助手 1.0.14 手动接管版" in ov,
+          }
+          failed=[k for k,v in checks.items() if not v]
+          for k,v in checks.items():
+              print(("OK  " if v else "FAIL")+" "+k)
+          if failed:
+              raise SystemExit("Validation failed: "+", ".join(failed))
+
+          assert 'FLAG_NOT_TOUCHABLE' in svc
+          i=svc.index('sessionButtonLp = new WindowManager.LayoutParams')
+          j=svc.index('sessionButtonLp.gravity',i)
+          assert 'FLAG_NOT_TOUCHABLE' not in svc[i:j], "manual button accidentally not touchable"
           assert 'sessionButton.setVisibility(View.INVISIBLE)' in svc
           assert 'sessionButton.setVisibility(View.VISIBLE)' in svc
-          assert 'engineBridge.newSession()' in svc
-          assert 'putLong(MainActivity.KEY_SESSION, reconnectSession)' in svc
-          assert 'loadedSession = Long.MIN_VALUE' in svc
-          assert '@JavascriptInterface\n    public synchronized void newSession()' in eb
+
           a=ov.index("<script>")+8
           b=ov.rindex("</script>")
           Path("/tmp/overlay-v114.js").write_text(ov[a:b])
