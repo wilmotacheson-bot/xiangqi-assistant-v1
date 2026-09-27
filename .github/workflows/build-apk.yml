@@ -413,6 +413,50 @@ jobs:
           curl -fL --retry 3 https://github.com/official-pikafish/Networks/releases/download/master-net/pikafish.nnue -o app/src/main/assets/pikafish.nnue
           test "$(stat -c%s app/src/main/assets/pikafish.nnue)" -gt 1000000
 
+      - name: Smoke-test packaged ARM64 Pikafish + NNUE
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq qemu-user
+          python - <<'PY'
+          import os, subprocess, select, time, sys
+          root=os.environ["GITHUB_WORKSPACE"]
+          exe=os.path.join(root,"app/src/main/jniLibs/arm64-v8a/libpikafish.so")
+          net=os.path.join(root,"app/src/main/assets/pikafish.nnue")
+          p=subprocess.Popen(["qemu-aarch64",exe],cwd=os.path.dirname(net),
+              stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,
+              text=True,bufsize=1)
+          log=[]
+          def send(x):
+              p.stdin.write(x+"\n"); p.stdin.flush()
+          def wait_for(prefix, timeout):
+              end=time.time()+timeout
+              while time.time()<end:
+                  if p.poll() is not None:
+                      raise SystemExit("Pikafish exited early: %s\n%s"%(p.returncode,"\n".join(log[-30:])))
+                  r,_,_=select.select([p.stdout],[],[],0.25)
+                  if not r: continue
+                  line=p.stdout.readline().strip()
+                  if not line: continue
+                  log.append(line)
+                  if line==prefix or line.startswith(prefix+" "): return line
+              raise SystemExit("Timeout waiting for %s\n%s"%(prefix,"\n".join(log[-30:])))
+          send("uci"); wait_for("uciok",10)
+          send("setoption name Threads value 2")
+          send("setoption name Hash value 32")
+          send("setoption name EvalFile value "+net)
+          send("isready"); wait_for("readyok",20)
+          fen="rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w - - 0 1"
+          send("position fen "+fen)
+          send("go movetime 350")
+          bm=wait_for("bestmove",12)
+          if len(bm.split())<2 or bm.split()[1]=="(none)":
+              raise SystemExit("No usable bestmove: "+bm)
+          print("ARM64 Pikafish smoke test OK:",bm)
+          send("quit")
+          try: p.wait(timeout=3)
+          except subprocess.TimeoutExpired: p.kill()
+          PY
+
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.10.2'
