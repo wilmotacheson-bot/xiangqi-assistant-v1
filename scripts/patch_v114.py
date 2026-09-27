@@ -16,6 +16,24 @@ new='    private WebView overlay;\n    private WindowManager.LayoutParams overla
 if old not in s: raise SystemExit('overlay field anchor missing')
 s=s.replace(old,new,1)
 
+# Re-enabling Accessibility is itself a fresh-session boundary.
+p=Path('app/src/main/java/com/openai/xiangqiassist/ChessAccessibilityService.java')
+_src=p.read_text()
+old='''    @Override protected void onServiceConnected() {
+        super.onServiceConnected();
+        wm = (WindowManager) getSystemService(WINDOW_SERVICE);'''
+new='''    @Override protected void onServiceConnected() {
+        super.onServiceConnected();
+        long reconnectSession = System.currentTimeMillis();
+        getSharedPreferences(MainActivity.PREFS, MODE_PRIVATE).edit()
+                .putLong(MainActivity.KEY_SESSION, reconnectSession).apply();
+        loadedSession = Long.MIN_VALUE;
+        loadedSide = "";
+        wm = (WindowManager) getSystemService(WINDOW_SERVICE);'''
+if old not in _src: raise SystemExit('onServiceConnected anchor missing')
+_src=_src.replace(old,new,1)
+p.write_text(_src)
+
 # add helper methods before applyConfigNow
 anchor='    private void applyConfigNow() {'
 helpers=r'''    private int dp(int v) {
