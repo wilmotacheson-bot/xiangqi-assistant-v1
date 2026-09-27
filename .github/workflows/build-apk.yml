@@ -1,4 +1,4 @@
-name: Build Xiangqi Assistant v1.0.7 Five Second Strong Validation
+name: Build Xiangqi Assistant v1.0.9 Stable Adaptive
 
 on:
   workflow_dispatch:
@@ -19,10 +19,10 @@ jobs:
           unzip -t baseline.zip
           rm -rf app
           unzip -o baseline.zip -d .
-          sed -i "s/applicationId 'com.openai.xiangqiassist.compat'/applicationId 'com.openai.xiangqiassist.v107'/" app/build.gradle
-          sed -E -i "s/versionCode [0-9]+/versionCode 107/" app/build.gradle
-          sed -E -i "s/versionName '[^']+'/versionName '1.0.7-five-sec'/" app/build.gradle
-          sed -i 's/android:label="象棋助手 v1"/android:label="象棋助手 1.0.7 五秒强校验版"/' app/src/main/AndroidManifest.xml
+          sed -i "s/applicationId 'com.openai.xiangqiassist.compat'/applicationId 'com.openai.xiangqiassist.v109'/" app/build.gradle
+          sed -E -i "s/versionCode [0-9]+/versionCode 109/" app/build.gradle
+          sed -E -i "s/versionName '[^']+'/versionName '1.0.9-stable'/" app/build.gradle
+          sed -i 's/android:label="象棋助手 v1"/android:label="象棋助手 1.0.9 稳定版"/' app/src/main/AndroidManifest.xml
 
       - name: Patch resilient Pikafish runtime
         run: |
@@ -33,6 +33,7 @@ jobs:
 
           import java.io.*;
           import java.nio.charset.StandardCharsets;
+          import java.util.ArrayDeque;
           import java.util.concurrent.BlockingQueue;
           import java.util.concurrent.LinkedBlockingQueue;
           import java.util.concurrent.TimeUnit;
@@ -55,6 +56,7 @@ jobs:
               private Process process;
               private BufferedWriter writer;
               private final BlockingQueue<String> lines = new LinkedBlockingQueue<>();
+              private final ArrayDeque<String> tail = new ArrayDeque<>();
               private Thread readerThread;
               private boolean ready;
               private long startedAtMs;
@@ -65,15 +67,8 @@ jobs:
               PikafishEngine(Context c) { context = c.getApplicationContext(); }
 
               synchronized void warmUp() {
-                  try {
-                      ensureStarted();
-                      if (!probeReady(3500)) {
-                          restart("预热 ready 超时");
-                          ensureStarted();
-                      }
-                  } catch (Throwable t) {
-                      closeQuietly();
-                  }
+                  try { ensureStarted(); }
+                  catch (Throwable t) { closeQuietly(); }
               }
 
               synchronized Result analyze(String fen, int moveTimeMs) {
@@ -83,50 +78,42 @@ jobs:
                           return analyzeOnce(fen, moveTimeMs);
                       } catch (InterruptedException e) {
                           Thread.currentThread().interrupt();
-                          closeQuietly();
-                          return Result.err("Pikafish 任务已被新的局面替换");
+                          return Result.err("Pikafish 任务已取消");
                       } catch (Throwable t) {
-                          last = describe(t);
+                          last = describe(t) + diagnosticSuffix();
                           closeQuietly();
                           if (attempt == 1) {
-                              try { Thread.sleep(80L); } catch (InterruptedException e) {
+                              try { Thread.sleep(120L); }
+                              catch (InterruptedException e) {
                                   Thread.currentThread().interrupt();
                                   return Result.err("Pikafish 任务已取消");
                               }
                           }
                       }
                   }
-                  return Result.err("Pikafish 自动重启后仍失败: " + last);
+                  return Result.err("Pikafish 两次启动均失败: " + last);
               }
 
               private Result analyzeOnce(String fen, int moveTimeMs) throws Exception {
                   ensureStarted();
-
-                  // A child process can remain technically alive after Android throttling while no longer answering.
-                  // Treat a failed ping as a dead engine and force a fresh process.
-                  if (!probeReady(2800)) {
-                      restart("ready ping 超时");
-                      ensureStarted();
-                      if (!probeReady(4000)) throw new IOException("重启后仍未 ready");
-                  }
-
                   drain();
                   send("position fen " + fen);
-                  int thinkMs = Math.max(250, Math.min(8000, moveTimeMs));
+                  int thinkMs = Math.max(250, Math.min(5000, moveTimeMs));
                   send("go movetime " + thinkMs);
 
-                  long end = System.currentTimeMillis() + Math.max(5500L, thinkMs + 3500L);
+                  long end = System.currentTimeMillis() + thinkMs + 2500L;
                   int cp = 0, depth = 0;
                   while (System.currentTimeMillis() < end) {
                       if (Thread.currentThread().isInterrupted()) throw new InterruptedException();
                       if (process == null || !process.isAlive()) {
                           throw new IOException("引擎进程已退出" + exitSuffix());
                       }
-                      String line = lines.poll(180, TimeUnit.MILLISECONDS);
+                      String line = lines.poll(120, TimeUnit.MILLISECONDS);
                       if (line == null) continue;
+                      remember(line);
                       if (line.startsWith("info ")) {
                           Matcher d = DEPTH.matcher(line); if (d.find()) depth = Integer.parseInt(d.group(1));
-                          Matcher s = SCORE_CP.matcher(line); if (s.find()) cp = Integer.parseInt(s.group(1));
+                          Matcher c = SCORE_CP.matcher(line); if (c.find()) cp = Integer.parseInt(c.group(1));
                           Matcher m = SCORE_MATE.matcher(line); if (m.find()) cp = Integer.parseInt(m.group(1)) > 0 ? 30000 : -30000;
                       } else if (line.startsWith("bestmove ")) {
                           String[] p = line.trim().split("\\s+");
@@ -138,16 +125,17 @@ jobs:
                   }
 
                   try { send("stop"); } catch (Throwable ignored) {}
-                  // Give Pikafish a brief chance to return bestmove after stop.
-                  long stopEnd = System.currentTimeMillis() + 800L;
+                  long stopEnd = System.currentTimeMillis() + 1200L;
                   while (System.currentTimeMillis() < stopEnd) {
                       String line = lines.poll(100, TimeUnit.MILLISECONDS);
-                      if (line != null && line.startsWith("bestmove ")) {
+                      if (line == null) continue;
+                      remember(line);
+                      if (line.startsWith("bestmove ")) {
                           String[] p = line.trim().split("\\s+");
                           if (p.length >= 2 && !p[1].equals("(none)")) return new Result(p[1], cp, depth, null);
                       }
                   }
-                  throw new IOException("计算超时，准备自动重启");
+                  throw new IOException("计算超时");
               }
 
               private void ensureStarted() throws Exception {
@@ -171,31 +159,27 @@ jobs:
                       if (p == null) return;
                       try (BufferedReader br = new BufferedReader(new InputStreamReader(p.getInputStream(), StandardCharsets.UTF_8))) {
                           String line;
-                          while ((line = br.readLine()) != null) lines.offer(line);
+                          while ((line = br.readLine()) != null) {
+                              remember(line);
+                              lines.offer(line);
+                          }
                       } catch (IOException ignored) {}
                   }, "pikafish-reader");
                   readerThread.setDaemon(true);
                   readerThread.start();
 
                   send("uci");
-                  if (!waitFor("uciok", 6000)) throw new IOException("启动等待 uciok 超时" + exitSuffix());
-                  send("setoption name Threads value 4");
-                  send("setoption name Hash value 96");
+                  if (!waitFor("uciok", 7000)) throw new IOException("启动等待 uciok 超时" + exitSuffix() + diagnosticSuffix());
+                  send("setoption name Threads value 2");
+                  send("setoption name Hash value 32");
                   send("setoption name EvalFile value " + net.getAbsolutePath());
                   send("isready");
-                  if (!waitFor("readyok", 12000)) throw new IOException("NNUE 加载/ready 超时" + exitSuffix());
-                  ready = true;
-              }
-
-              private boolean probeReady(long timeoutMs) throws Exception {
-                  if (process == null || !process.isAlive() || writer == null) return false;
-                  drain();
+                  if (!waitFor("readyok", 15000)) throw new IOException("NNUE 加载/ready 超时" + exitSuffix() + diagnosticSuffix());
+                  send("ucinewgame");
                   send("isready");
-                  return waitFor("readyok", timeoutMs);
-              }
-
-              private void restart(String why) {
-                  closeQuietly();
+                  if (!waitFor("readyok", 4000)) throw new IOException("新局初始化超时" + exitSuffix() + diagnosticSuffix());
+                  ready = true;
+                  drain();
               }
 
               private File ensureNetwork() throws IOException {
@@ -230,12 +214,26 @@ jobs:
                   while (System.currentTimeMillis() < end) {
                       if (Thread.currentThread().isInterrupted()) throw new InterruptedException();
                       if (process == null || !process.isAlive()) return false;
-                      String line = lines.poll(150, TimeUnit.MILLISECONDS);
+                      String line = lines.poll(120, TimeUnit.MILLISECONDS);
                       if (line == null) continue;
+                      remember(line);
                       if (line.equals(token) || line.startsWith(token + " ")) return true;
                       if (line.contains("CRITICAL ERROR")) return false;
                   }
                   return false;
+              }
+
+              private synchronized void remember(String line) {
+                  if (line == null || line.isEmpty()) return;
+                  if (tail.size() >= 6) tail.removeFirst();
+                  tail.addLast(line.length() > 180 ? line.substring(0, 180) : line);
+              }
+
+              private synchronized String diagnosticSuffix() {
+                  if (tail.isEmpty()) return "";
+                  String last = tail.peekLast();
+                  if (last == null || last.startsWith("info ")) return "";
+                  return " · " + last;
               }
 
               private String exitSuffix() {
@@ -257,11 +255,11 @@ jobs:
 
               private void closeQuietly() {
                   ready = false;
-                  try { if (writer != null) { writer.write("quit\n"); writer.flush(); } } catch (Throwable ignored) {}
+                  try { if (writer != null && process != null && process.isAlive()) { writer.write("quit\n"); writer.flush(); } } catch (Throwable ignored) {}
                   try {
-                      if (process != null) {
+                      if (process != null && process.isAlive()) {
                           process.destroy();
-                          try { process.waitFor(200, TimeUnit.MILLISECONDS); } catch (Throwable ignored) {}
+                          try { process.waitFor(450, TimeUnit.MILLISECONDS); } catch (Throwable ignored) {}
                           if (process.isAlive()) process.destroyForcibly();
                       }
                   } catch (Throwable ignored) {}
@@ -304,10 +302,7 @@ jobs:
               @JavascriptInterface
               public synchronized void analyze(String fen, int requestId, int moveTimeMs) {
                   latestRequest.set(requestId);
-
-                  // Never let old timed-chess positions queue behind the current one.
                   worker.getQueue().clear();
-                  if (running != null && !running.isDone()) running.cancel(true);
 
                   running = worker.submit(() -> {
                       PikafishEngine.Result r = engine.analyze(fen, moveTimeMs);
@@ -323,7 +318,6 @@ jobs:
 
               @JavascriptInterface
               public synchronized void resetEngine() {
-                  if (running != null && !running.isDone()) running.cancel(true);
                   worker.getQueue().clear();
                   worker.execute(() -> {
                       engine.close();
@@ -331,15 +325,18 @@ jobs:
                   });
               }
 
+              @JavascriptInterface
+              public synchronized void warmUp() {
+                  if (running == null || running.isDone()) worker.execute(engine::warmUp);
+              }
+
               void close() {
                   latestRequest.set(-1);
-                  synchronized (this) {
-                      if (running != null) running.cancel(true);
-                  }
                   worker.shutdownNow();
                   engine.close();
               }
           }
+
           JAVA
 
           python - <<'PY'
@@ -356,22 +353,25 @@ jobs:
           PY
           python scripts/patch_v106.py
           python scripts/patch_v107.py
+          python scripts/patch_v109.py
 
-      - name: Validate v1.0.7 overlay logic
+      - name: Validate v1.0.9 overlay and engine bridge
         run: |
-          grep -q "AndroidEngine.analyze(boardToFen(pos,red),id,5000)" app/src/main/assets/overlay.html
-          grep -q "Pikafish 固定5秒" app/src/main/assets/overlay.html
-          grep -q "检测到对方将军" app/src/main/assets/overlay.html
-          grep -q "已拦截画面不一致推荐" app/src/main/assets/overlay.html
-          grep -q "restoreTrustedState" app/src/main/assets/overlay.html
+          grep -q "xiangqi_v109_trusted_state" app/src/main/assets/overlay.html
+          grep -q "adaptiveThinkMs" app/src/main/assets/overlay.html
+          grep -q "enginePositionIssue" app/src/main/assets/overlay.html
+          grep -q "本次只重启一次" app/src/main/assets/overlay.html
+          grep -q "public synchronized void warmUp()" app/src/main/java/com/openai/xiangqiassist/EngineBridge.java
+          ! grep -q "running.cancel(true)" app/src/main/java/com/openai/xiangqiassist/EngineBridge.java
+          ! grep -q "probeReady" app/src/main/java/com/openai/xiangqiassist/PikafishEngine.java
           python - <<'PY'
           from pathlib import Path
           s=Path('app/src/main/assets/overlay.html').read_text()
           a=s.index("<script>")+8
           b=s.rindex("</script>")
-          Path("/tmp/overlay-v107.js").write_text(s[a:b])
+          Path("/tmp/overlay-v109.js").write_text(s[a:b])
           PY
-          node --check /tmp/overlay-v107.js
+          node --check /tmp/overlay-v109.js
 
       - uses: actions/setup-java@v5
         with:
@@ -425,24 +425,24 @@ jobs:
           BT="$ANDROID_HOME/build-tools/35.0.0"
           IN=app/build/outputs/apk/release/app-release-unsigned.apk
           ALIGNED=app-release-aligned.apk
-          OUT=xiangqi-assistant-v1.0.7-five-sec.apk
+          OUT=xiangqi-assistant-v1.0.9-stable.apk
           "$BT/zipalign" -p -f 4 "$IN" "$ALIGNED"
-          keytool -genkeypair -v -keystore release.keystore -storepass changeit -keypass changeit -alias xiangqi-v107 -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Xiangqi Assistant v1.0.7,O=Local Build,C=US"
+          keytool -genkeypair -v -keystore release.keystore -storepass changeit -keypass changeit -alias xiangqi-v109 -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Xiangqi Assistant v1.0.9,O=Local Build,C=US"
           "$BT/apksigner" sign --ks release.keystore --ks-key-alias xiangqi-v107 --ks-pass pass:changeit --key-pass pass:changeit --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true --v4-signing-enabled false --out "$OUT" "$ALIGNED"
           unzip -t "$OUT"
           unzip -l "$OUT" | grep 'lib/arm64-v8a/libpikafish.so'
           unzip -l "$OUT" | grep 'assets/pikafish.nnue'
           "$BT/apksigner" verify --verbose --print-certs "$OUT" | tee apk-signature.txt
           "$BT/aapt2" dump badging "$OUT" | tee apk-badging.txt
-          grep "package: name='com.openai.xiangqiassist.v107'" apk-badging.txt
-          grep "versionCode='107'" apk-badging.txt
+          grep "package: name='com.openai.xiangqiassist.v109'" apk-badging.txt
+          grep "versionCode='109'" apk-badging.txt
           sha256sum "$OUT" | tee apk-sha256.txt
 
       - uses: actions/upload-artifact@v4
         with:
-          name: xiangqi-assistant-v1.0.7-five-sec-apk
+          name: xiangqi-assistant-v1.0.9-stable-apk
           path: |
-            xiangqi-assistant-v1.0.7-five-sec.apk
+            xiangqi-assistant-v1.0.9-stable.apk
             apk-sha256.txt
             apk-badging.txt
             apk-signature.txt
