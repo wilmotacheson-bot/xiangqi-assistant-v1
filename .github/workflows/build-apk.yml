@@ -12,27 +12,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Expand v1.0.4 source
+      - name: Inspect engine source
         run: |
-          cat source_v104/chunk_00a.b64 source_v104/chunk_00b.b64 source_v104/chunk_01.b64 source_v104/chunk_02.b64 source_v104/chunk_03.b64 source_v104/chunk_04.b64 source_v104/chunk_05.b64 source_v104/chunk_06.b64 | base64 -d > xiangqi-project-src-v104.zip
-          echo "1a284d8c74122a3c53f3b8c2780c90690333a88b00420a57e74294be178a4e94  xiangqi-project-src-v104.zip" | sha256sum -c -
           unzip -t xiangqi-project-src-v104.zip
+          rm -rf app
           unzip -o xiangqi-project-src-v104.zip -d .
-          test -f app/build.gradle
-          test -f app/src/main/assets/overlay.html
-          test -f app/src/main/java/com/openai/xiangqiassist/ChessAccessibilityService.java
-          sed -i "s/applicationId 'com.openai.xiangqiassist.compat'/applicationId 'com.openai.xiangqiassist.autoturn'/" app/build.gradle
-          sed -i 's/android:label="象棋助手 v1"/android:label="象棋助手 1.0.4 自动回合版"/' app/src/main/AndroidManifest.xml
-          python - <<'PY'
-          from pathlib import Path
-          p=Path('app/src/main/assets/overlay.html')
-          s=p.read_text()
-          needle="hint={m,score:er.score,depth:er.depth};drawMove(m);"
-          replacement="if(!hintFitsObserved(m)){currentBoard=null;currentHash='';turn='unknown';hint=null;clearArrow();showStatus('检测到内部局面与画面不一致','已阻止错误箭头 · 下一帧按将/帅方位和白圈重新同步');return}hint={m,score:er.score,depth:er.depth};drawMove(m);"
-          if needle not in s:
-              raise SystemExit('arrow guard insertion point missing')
-          p.write_text(s.replace(needle,replacement,1))
-          PY
+          echo '===== PikafishEngine.java ====='
+          cat app/src/main/java/com/openai/xiangqiassist/PikafishEngine.java
+          echo '===== EngineBridge.java ====='
+          cat app/src/main/java/com/openai/xiangqiassist/EngineBridge.java
+          echo '===== analyzeCurrent excerpt ====='
+          grep -n -A35 -B8 "function analyzeCurrent" app/src/main/assets/overlay.html || true
+          exit 1
 
       - uses: actions/setup-java@v5
         with:
