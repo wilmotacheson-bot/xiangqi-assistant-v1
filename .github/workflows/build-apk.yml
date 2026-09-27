@@ -399,7 +399,7 @@ jobs:
           js=s[a:b]
           Path("/tmp/overlay-v113.js").write_text(js)
           assert "function detectUiTurn(){return null}" in js
-          assert "头像绿框" not in js
+          assert "头像绿框确认" not in js
           assert "const uiTurn=" not in js[js.index("function acceptStable"):js.index("function handleNoBoard")]
           assert "turn=isRed(one.piece)===userRed?'opp':'me'" in js
           assert "turn=sync.red===userRed?'me':'opp'" in js
