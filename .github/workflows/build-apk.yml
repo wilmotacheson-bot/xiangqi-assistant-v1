@@ -14,6 +14,7 @@ jobs:
 
       - name: Expand v1.0.4 source
         run: |
+          cat source_v104/chunk_00.b64 source_v104/chunk_01.b64 source_v104/chunk_02.b64 source_v104/chunk_03.b64 source_v104/chunk_04.b64 source_v104/chunk_05.b64 source_v104/chunk_06.b64 | base64 -d > xiangqi-project-src-v104.zip
           echo "1a284d8c74122a3c53f3b8c2780c90690333a88b00420a57e74294be178a4e94  xiangqi-project-src-v104.zip" | sha256sum -c -
           unzip -t xiangqi-project-src-v104.zip
           unzip -o xiangqi-project-src-v104.zip -d .
