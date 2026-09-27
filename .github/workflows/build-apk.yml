@@ -1,4 +1,4 @@
-name: Build Xiangqi Assistant v1 APK
+name: Build Xiangqi Assistant v1.0.4 APK
 
 on:
   workflow_dispatch:
@@ -12,110 +12,26 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Reconstruct and verify source bundle
+      - name: Expand v1.0.4 source
         run: |
-          cat source/chunk_00.b64 source/chunk_01.b64 source/chunk_02.b64 source/chunk_03.b64 source/chunk_04.b64 source/chunk_05.b64 | base64 -d > xiangqi-project-src.zip
-          echo "9f3b9935ba01acb4e0b5d121f0598030bff638deb996ecf00fc1c4506e587811  xiangqi-project-src.zip" | sha256sum -c -
-          unzip -t xiangqi-project-src.zip
-          unzip -o xiangqi-project-src.zip -d .
+          echo "1a284d8c74122a3c53f3b8c2780c90690333a88b00420a57e74294be178a4e94  xiangqi-project-src-v104.zip" | sha256sum -c -
+          unzip -t xiangqi-project-src-v104.zip
+          unzip -o xiangqi-project-src-v104.zip -d .
           test -f app/build.gradle
-          test -f app/src/main/AndroidManifest.xml
-          sed -i "s/applicationId 'com.openai.xiangqiassist'/applicationId 'com.openai.xiangqiassist.compat'/" app/build.gradle
-          sed -i "s/versionCode 100/versionCode 103/" app/build.gradle
-          sed -i "s/versionName '1.0.0'/versionName '1.0.3-rollback-fix'/" app/build.gradle
-          sed -i 's/象棋助手 v1/象棋助手 v1.0.3 回滚增强版/' app/src/main/res/values/strings.xml
-
-      - name: Patch v1.0.3 rollback + targeted sync fix
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-
-          p=Path('app/src/main/assets/overlay.html')
-          s=p.read_text()
-
-          x=s.index("let fullStableKey='',fullStableCount=0,untrackedFrames=0;")
-          y=s.index("window.onCaptureError=function",x)
-          stable="""let fullStableKey='',fullStableCount=0,untrackedFrames=0;
-          function acceptStable(rec){
-            if(!rec||!rec.b)return;
-            const key=hashBoard(rec.b);
-            if(key===fullStableKey)fullStableCount++;else{fullStableKey=key;fullStableCount=1}
-            if(fullStableCount<2){clearArrow();showStatus('棋盘已识别','等待第二帧确认，避免动画误判');return}
-            lastOcc=rec.occ.slice();lastSide=rec.side.slice();misses=0;
-
-            if(!currentBoard){
-              currentBoard=rec.b.slice();currentHash=key;turn='me';untrackedFrames=0;
-              showStatus('棋盘已锁定','完整识别 '+currentBoard.filter(Boolean).length+' 枚棋子 · 正在计算');
-              setTimeout(analyzeCurrent,40);return
-            }
-
-            if(boardsEqual(currentBoard,rec.b)){
-              untrackedFrames=0;
-              if(turn==='me'){
-                if(hint)drawMove(hint.m);else if(!analysisRunning)setTimeout(analyzeCurrent,20)
-              }else showStatus('等待对方走棋','棋面稳定，未发现新的合法变化');
-              return
-            }
-
-            hint=null;clearArrow();
-            const moverRed=turn==='me'?userRed:!userRed;
-            showStatus('检测到棋面变化','正在同步这一步…');
-
-            let sync=null;
-            const one=transitionByMap(currentBoard,rec.occ,rec.side,moverRed);
-            if(one)sync={b:applyMove(currentBoard,one),red:!moverRed,seq:[one]};
-            if(!sync)sync=reconcileFromMap(currentBoard,rec.occ,rec.side,moverRed);
-            if(!sync)sync=reconcileExact(currentBoard,rec.b,moverRed,4);
-
-            if(sync){
-              currentBoard=sync.b.slice();currentHash=hashBoard(currentBoard);untrackedFrames=0;
-              turn=sync.red===userRed?'me':'opp';
-              if(turn==='me'){
-                showStatus('已检测到对方走棋','正在计算下一步…');
-                setTimeout(analyzeCurrent,35)
-              }else showStatus('已检测到你的落子','等待对方走棋');
-              return
-            }
-
-            untrackedFrames++;
-            if(untrackedFrames<3){
-              showStatus('正在确认棋面变化','完整识别稳定，但还未找到合法路径 · '+untrackedFrames+'/3');
-              return
-            }
-
-            // Minimal fallback: preserve the fast v1.0.1 behavior, but do not swallow the move.
-            // The board has been stable for multiple frames, so rebase to it and flip side-to-move
-            // from the previously trusted turn instead of defaulting back to "waiting opponent".
-            const previousTurn=turn;
-            currentBoard=rec.b.slice();currentHash=key;untrackedFrames=0;
-            turn=previousTurn==='opp'?'me':'opp';
-            if(turn==='me'){
-              showStatus('已自动恢复同步','未能还原具体走法，但已确认对方完成落子 · 正在计算');
-              setTimeout(analyzeCurrent,35)
-            }else{
-              showStatus('已自动恢复同步','未能还原具体走法，但已确认你的落子 · 等待对方')
-            }
-          }
-          function handleNoBoard(msg){misses++;clearArrow();hint=null;showStatus(msg||'正在寻找木纹棋盘…','已收到 '+frameSeen+' 帧');if(misses>=20){currentBoard=null;currentHash='';turn='me';untrackedFrames=0}}
-          """
-          s=s[:x]+stable+s[y:]
-          s=s.replace("showStatus('象棋助手 v1 已启动','AccessibilityService 截目标窗口 · 正在寻找木纹棋盘…');",
-                      "showStatus('象棋助手 v1.0.3 回滚增强版已启动','保留第一版速度 · 只修复偶发吃子后丢回合');")
-          p.write_text(s)
-          PY
+          test -f app/src/main/assets/overlay.html
+          test -f app/src/main/java/com/openai/xiangqiassist/ChessAccessibilityService.java
+          sed -i "s/applicationId 'com.openai.xiangqiassist.compat'/applicationId 'com.openai.xiangqiassist.autoturn'/" app/build.gradle
 
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
 
-      - name: Install Android command-line tools, SDK and NDK
+      - name: Install Android SDK + NDK
         run: |
           SDK="$RUNNER_TEMP/android-sdk"
           mkdir -p "$SDK/cmdline-tools"
-          curl -fL --retry 3 \
-            https://dl.google.com/android/repository/commandlinetools-linux-15859902_latest.zip \
-            -o "$RUNNER_TEMP/android-cmdline-tools.zip"
+          curl -fL --retry 3             https://dl.google.com/android/repository/commandlinetools-linux-15859902_latest.zip             -o "$RUNNER_TEMP/android-cmdline-tools.zip"
           unzip -q "$RUNNER_TEMP/android-cmdline-tools.zip" -d "$RUNNER_TEMP/android-cmdline"
           mkdir -p "$SDK/cmdline-tools/latest"
           mv "$RUNNER_TEMP/android-cmdline/cmdline-tools/"* "$SDK/cmdline-tools/latest/"
@@ -125,7 +41,7 @@ jobs:
           yes | "$SDK/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
           "$SDK/cmdline-tools/latest/bin/sdkmanager" "platforms;android-35" "build-tools;35.0.0" "ndk;28.2.13676358"
 
-      - name: Build official Pikafish for Android arm64
+      - name: Build official Pikafish Android arm64
         run: |
           git clone --depth 1 https://github.com/official-pikafish/Pikafish.git /tmp/Pikafish
           export ANDROID_NDK_ROOT="$ANDROID_HOME/ndk/28.2.13676358"
@@ -144,9 +60,7 @@ jobs:
 
       - name: Download official Pikafish NNUE
         run: |
-          curl -fL --retry 3 \
-            https://github.com/official-pikafish/Networks/releases/download/master-net/pikafish.nnue \
-            -o app/src/main/assets/pikafish.nnue
+          curl -fL --retry 3             https://github.com/official-pikafish/Networks/releases/download/master-net/pikafish.nnue             -o app/src/main/assets/pikafish.nnue
           test "$(stat -c%s app/src/main/assets/pikafish.nnue)" -gt 1000000
           mkdir -p app/src/main/assets/licenses
           cp /tmp/Pikafish/Copying.txt app/src/main/assets/licenses/Pikafish-GPLv3.txt
@@ -156,37 +70,38 @@ jobs:
         with:
           gradle-version: '8.10.2'
 
-      - name: Build unsigned release APK
+      - name: Build release APK
         run: gradle --no-daemon :app:assembleRelease
 
-      - name: Align and sign compatibility APK
+      - name: Align and sign APK
         run: |
           BT="$ANDROID_HOME/build-tools/35.0.0"
           IN=app/build/outputs/apk/release/app-release-unsigned.apk
           ALIGNED=app-release-aligned.apk
-          OUT=xiangqi-assistant-v1.0.1-compat.apk
-          test -f "$IN"
+          OUT=xiangqi-assistant-v1.0.4-auto-turn.apk
           "$BT/zipalign" -p -f 4 "$IN" "$ALIGNED"
-          keytool -genkeypair -v             -keystore compat-release.keystore             -storepass changeit             -keypass changeit             -alias xiangqi-compat             -keyalg RSA -keysize 2048 -validity 10000             -dname "CN=Xiangqi Assistant Compat,O=OpenAI Build,C=US"
-          "$BT/apksigner" sign             --ks compat-release.keystore             --ks-key-alias xiangqi-compat             --ks-pass pass:changeit             --key-pass pass:changeit             --v1-signing-enabled true             --v2-signing-enabled true             --v3-signing-enabled true             --v4-signing-enabled false             --out "$OUT" "$ALIGNED"
+          keytool -genkeypair -v             -keystore release.keystore             -storepass changeit             -keypass changeit             -alias xiangqi-v104             -keyalg RSA -keysize 2048 -validity 10000             -dname "CN=Xiangqi Assistant v1.0.4,O=Local Build,C=US"
+          "$BT/apksigner" sign             --ks release.keystore             --ks-key-alias xiangqi-v104             --ks-pass pass:changeit             --key-pass pass:changeit             --v1-signing-enabled true             --v2-signing-enabled true             --v3-signing-enabled true             --v4-signing-enabled false             --out "$OUT" "$ALIGNED"
 
-      - name: Verify final APK thoroughly
+      - name: Verify v1.0.4 APK
         run: |
           BT="$ANDROID_HOME/build-tools/35.0.0"
-          APK=xiangqi-assistant-v1.0.1-compat.apk
+          APK=xiangqi-assistant-v1.0.4-auto-turn.apk
           unzip -t "$APK"
           unzip -l "$APK" | grep 'lib/arm64-v8a/libpikafish.so'
           unzip -l "$APK" | grep 'assets/pikafish.nnue'
-          "$BT/apksigner" verify --verbose --print-certs "$APK"
+          "$BT/apksigner" verify --verbose --print-certs "$APK" | tee apk-signature.txt
           "$BT/aapt2" dump badging "$APK" | tee apk-badging.txt
-          "$BT/aapt2" dump badging "$APK" | grep "package: name='com.openai.xiangqiassist.compat'"
+          grep "package: name='com.openai.xiangqiassist.autoturn'" apk-badging.txt
+          grep "versionCode='104'" apk-badging.txt
           sha256sum "$APK" | tee apk-sha256.txt
 
       - uses: actions/upload-artifact@v4
         with:
-          name: xiangqi-assistant-v1.0.1-compat-apk
+          name: xiangqi-assistant-v1.0.4-auto-turn-apk
           path: |
-            xiangqi-assistant-v1.0.1-compat.apk
+            xiangqi-assistant-v1.0.4-auto-turn.apk
             apk-sha256.txt
             apk-badging.txt
+            apk-signature.txt
           if-no-files-found: error
