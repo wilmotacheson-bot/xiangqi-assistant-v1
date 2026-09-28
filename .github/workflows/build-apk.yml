@@ -1,4 +1,4 @@
-name: Build Xiangqi Assistant v1.0.16 Precise Glyph
+name: Build Xiangqi Assistant v1.0.17 Stable Glyph Bank
 
 on:
   workflow_dispatch:
@@ -19,10 +19,10 @@ jobs:
           unzip -t baseline.zip
           rm -rf app
           unzip -o baseline.zip -d .
-          sed -i "s/applicationId 'com.openai.xiangqiassist.compat'/applicationId 'com.openai.xiangqiassist.v116'/" app/build.gradle
-          sed -E -i "s/versionCode [0-9]+/versionCode 116/" app/build.gradle
-          sed -E -i "s/versionName '[^']+'/versionName '1.0.16-precise-glyph'/" app/build.gradle
-          sed -i 's/android:label="象棋助手 v1"/android:label="象棋助手 1.0.16 精确棋子识别版"/' app/src/main/AndroidManifest.xml
+          sed -i "s/applicationId 'com.openai.xiangqiassist.compat'/applicationId 'com.openai.xiangqiassist.v117'/" app/build.gradle
+          sed -E -i "s/versionCode [0-9]+/versionCode 117/" app/build.gradle
+          sed -E -i "s/versionName '[^']+'/versionName '1.0.17-stable-glyph-bank'/" app/build.gradle
+          sed -i 's/android:label="象棋助手 v1"/android:label="象棋助手 1.0.17 稳定字形库版"/' app/src/main/AndroidManifest.xml
 
       - name: Patch resilient Pikafish runtime
         run: |
@@ -375,8 +375,9 @@ jobs:
           python scripts/patch_v114.py
           python scripts/patch_v115.py
           python scripts/patch_v116.py
+          python scripts/patch_v117.py
 
-      - name: Validate v1.0.16 precise glyph recognition
+      - name: Validate v1.0.17 stable glyph bank
         run: |
           python - <<'PY'
           from pathlib import Path
@@ -387,27 +388,26 @@ jobs:
               "manual reset retained": "↻ 新局 / 接管" in svc,
               "accessibility reconnect new session": "putLong(MainActivity.KEY_SESSION, reconnectSession)" in svc,
               "session isolation retained": "generation.incrementAndGet()" in eb,
-              "high-res descriptor": "function glyphDescriptor" in ov and "Array(400)" in ov,
-              "persistent device glyph bank": "xiangqi_fixedskin_glyphbank_v3" in ov,
-              "standard-start calibration": "learnGlyphBankFromStart" in ov and "START_BOARD[j]" in ov,
-              "all 14 piece classes required": "all.every(p=>samples[p]&&samples[p].length)" in ov,
-              "strict ambiguity rejection": "strictIdentityBoardOK" in ov and "identityUncertain:true" in ov,
-              "calibrated margin threshold": "cl.calibrated?.010" in ov,
-              "full 90 point reset text": "全扫90点并重新识别所有棋子" in ov,
+              "glyph bank v4": "xiangqi_fixedskin_glyphbank_v4" in ov,
+              "five frame calibration": "glyphCal.frames.length<5" in ov and "stableFrames:5" in ov,
+              "freeze after ready": "if(glyphBankReady())return true" in ov,
+              "no per-session overwrite": "lastSession" not in ov,
+              "cross class validation": "validateGlyphCandidate" in ov and "own-second<.020" in ov,
+              "mandatory calibration gate": "needsCalibration:true" in ov,
+              "full board reidentification retained": "全盘重识别" in ov,
+              "ambiguity rejection retained": "identityUncertain:true" in ov,
               "check latch retained": "checkHandledHash!==checkHash" in ov,
               "no green-frame turn logic": "function detectUiTurn(){return null}" in ov,
-              "global board solver retained": "solveGlobalBoard" in ov,
-              "locked orientation retained": "frameFlip=flipped" in ov,
-              "v116 title": "象棋助手 1.0.16 精确棋子识别版" in ov,
+              "v117 title": "象棋助手 1.0.17 稳定字形库版" in ov,
           }
           failed=[k for k,v in checks.items() if not v]
           for k,v in checks.items(): print(("OK  " if v else "FAIL")+" "+k)
           if failed: raise SystemExit("Validation failed: "+", ".join(failed))
           a=ov.index("<script>")+8
           b=ov.rindex("</script>")
-          Path("/tmp/overlay-v116.js").write_text(ov[a:b])
+          Path("/tmp/overlay-v117.js").write_text(ov[a:b])
           PY
-          node --check /tmp/overlay-v116.js
+          node --check /tmp/overlay-v117.js
 
       - uses: actions/setup-java@v5
         with:
@@ -510,24 +510,24 @@ jobs:
           BT="$ANDROID_HOME/build-tools/35.0.0"
           IN=app/build/outputs/apk/release/app-release-unsigned.apk
           ALIGNED=app-release-aligned.apk
-          OUT=xiangqi-assistant-v1.0.16-precise-glyph.apk
+          OUT=xiangqi-assistant-v1.0.17-stable-glyph-bank.apk
           "$BT/zipalign" -p -f 4 "$IN" "$ALIGNED"
-          keytool -genkeypair -v -keystore release.keystore -storepass changeit -keypass changeit -alias xiangqi-v116 -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Xiangqi Assistant v1.0.16,O=Local Build,C=US"
-          "$BT/apksigner" sign --ks release.keystore --ks-key-alias xiangqi-v116 --ks-pass pass:changeit --key-pass pass:changeit --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true --v4-signing-enabled false --out "$OUT" "$ALIGNED"
+          keytool -genkeypair -v -keystore release.keystore -storepass changeit -keypass changeit -alias xiangqi-v117 -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Xiangqi Assistant v1.0.17,O=Local Build,C=US"
+          "$BT/apksigner" sign --ks release.keystore --ks-key-alias xiangqi-v117 --ks-pass pass:changeit --key-pass pass:changeit --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true --v4-signing-enabled false --out "$OUT" "$ALIGNED"
           unzip -t "$OUT"
           unzip -l "$OUT" | grep 'lib/arm64-v8a/libpikafish.so'
           unzip -l "$OUT" | grep 'assets/pikafish.nnue'
           "$BT/apksigner" verify --verbose --print-certs "$OUT" | tee apk-signature.txt
           "$BT/aapt2" dump badging "$OUT" | tee apk-badging.txt
-          grep "package: name='com.openai.xiangqiassist.v116'" apk-badging.txt
-          grep "versionCode='116'" apk-badging.txt
+          grep "package: name='com.openai.xiangqiassist.v117'" apk-badging.txt
+          grep "versionCode='117'" apk-badging.txt
           sha256sum "$OUT" | tee apk-sha256.txt
 
       - uses: actions/upload-artifact@v4
         with:
-          name: xiangqi-assistant-v1.0.16-precise-glyph-apk
+          name: xiangqi-assistant-v1.0.17-stable-glyph-bank-apk
           path: |
-            xiangqi-assistant-v1.0.16-precise-glyph.apk
+            xiangqi-assistant-v1.0.17-stable-glyph-bank.apk
             apk-sha256.txt
             apk-badging.txt
             apk-signature.txt
