@@ -262,3 +262,42 @@ if old not in j:
 j=j.replace(old,new,1)
 
 p.write_text(j)
+
+
+# Five-minute fast-mode retune for long 80-100 move games.
+p=Path('app/src/main/assets/overlay.html')
+s=p.read_text()
+old_sel="function selectedThinkMs(pos,red,legal){return ANALYSIS_MODE==='fast'?fastThinkMs(pos,red,legal):boundedThinkMs(pos,red,legal)}"
+new_sel="""function fastThinkMs100(pos,red,legal){
+  const FAST_ENGINE_BUDGET_MS_100=72000,FAST_TARGET_MOVES_100=100;
+  const n=legal.length;
+  if(n<=1)return 0;
+  let base;
+  if(kingInCheck(pos,red)){
+    base=n<=3?600:n<=6?900:1350;
+  }else{
+    const captures=legal.reduce((k,m)=>k+(pos[m.to]?1:0),0);
+    if(n<=8)base=500;
+    else if(n<=16)base=700;
+    else if(n<=26)base=900;
+    else if(n<=36)base=1250;
+    else base=1650;
+    if(captures>=4&&n>=18)base+=150;
+    if(captures>=7&&n>=28)base+=150;
+  }
+  base=Math.min(2200,base);
+  const remain=Math.max(0,FAST_ENGINE_BUDGET_MS_100-fastSpentMs);
+  const future=Math.max(10,FAST_TARGET_MOVES_100-fastSearches);
+  let budgetCap=Math.max(450,Math.min(2200,remain/Math.max(1,future)*1.18));
+  if(remain<12000)budgetCap=Math.min(budgetCap,550);
+  else if(remain<22000)budgetCap=Math.min(budgetCap,700);
+  else if(remain<35000)budgetCap=Math.min(budgetCap,900);
+  return Math.round(Math.max(450,Math.min(base,budgetCap,2200)));
+}
+function selectedThinkMs(pos,red,legal){return ANALYSIS_MODE==='fast'?fastThinkMs100(pos,red,legal):boundedThinkMs(pos,red,legal)}"""
+if old_sel not in s:
+    raise SystemExit('v119 selectedThinkMs missing')
+s=s.replace(old_sel,new_sel,1)
+s=s.replace("ANALYSIS_MODE==='fast'?' · 快棋最高4秒':' · 强模式最高4.5秒'",
+            "ANALYSIS_MODE==='fast'?' · 5分钟/100步 · 最高2.2秒':' · 强模式最高4.5秒'",1)
+p.write_text(s)
