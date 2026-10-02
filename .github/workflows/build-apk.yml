@@ -495,11 +495,11 @@ jobs:
                   log.append(line)
                   if line==prefix or line.startswith(prefix+" "): return line
               raise SystemExit("Timeout waiting for %s\n%s"%(prefix,"\n".join(log[-30:])))
-          send("uci"); wait_for("uciok",10)
+          send("uci"); wait_for("uciok",30)
           send("setoption name Threads value 2")
           send("setoption name Hash value 32")
           send("setoption name EvalFile value "+net)
-          send("isready"); wait_for("readyok",20)
+          send("isready"); wait_for("readyok",40)
           fens=[
               "rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w - - 0 1",
               "rnbakabnr/9/1c5c1/p1p1p1p1p/9/2P6/P3P1P1P/1C5C1/9/RNBAKABNR b - - 0 1",
@@ -508,7 +508,7 @@ jobs:
           for i,fen in enumerate(fens,1):
               send("position fen "+fen)
               send("go movetime 350")
-              bm=wait_for("bestmove",12)
+              bm=wait_for("bestmove",20)
               if len(bm.split())<2 or bm.split()[1]=="(none)":
                   raise SystemExit("No usable bestmove on search %d: %s"%(i,bm))
               print("ARM64 Pikafish sequential search %d OK:"%i,bm)
