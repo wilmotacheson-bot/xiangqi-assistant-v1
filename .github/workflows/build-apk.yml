@@ -419,6 +419,14 @@ jobs:
           PY
           node --check /tmp/overlay-v119.js
 
+      - uses: actions/upload-artifact@v4
+        with:
+          name: generated-v121-source
+          path: |
+            app/src/main/assets/overlay.html
+            app/src/main/java/com/openai/xiangqiassist/ChessAccessibilityService.java
+          if-no-files-found: error
+
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
