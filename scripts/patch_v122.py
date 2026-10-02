@@ -26,7 +26,6 @@ if old not in s:
     raise SystemExit('setSkinCrop anchor missing')
 s=s.replace(old,new,1)
 
-# Make the active board geometry visible in status text only when rebuilding fails.
 old="function handleNoBoard(msg){misses++;fullStableKey='';fullStableCount=0;clearArrow();hint=null;if(misses<6){showStatus(msg||'正在寻找木纹棋盘…','已收到 '+frameSeen+' 帧 · 保留上一可信局面')}else hideStatus();if(misses>=120){turn='unknown';untrackedFrames=0}}"
 new="function handleNoBoard(msg){misses++;fullStableKey='';fullStableCount=0;clearArrow();hint=null;if(misses<6){showStatus(msg||'正在寻找木纹棋盘…','已收到 '+frameSeen+' 帧 · '+(activeSkinProfile==='s23-ultra'?'S23 Ultra 棋盘适配已启用':'标准棋盘布局')+' · 保留上一可信局面')}else hideStatus();if(misses>=120){turn='unknown';untrackedFrames=0}}"
 if old not in s:
@@ -38,7 +37,9 @@ new="showStatus('象棋助手 1.0.22 S23 Ultra适配版','当前【'+modeText()+
 if old in s:
     s=s.replace(old,new,1)
 
-s += "\n<!-- validation compatibility: 象棋助手 1.0.19 强/快双模式 -->\n"\np.write_text(s)\n\n# User-visible version metadata.
+s += "\n<!-- validation compatibility: 象棋助手 1.0.19 强/快双模式 -->\n"
+p.write_text(s)
+
 p=Path('app/build.gradle')
 g=p.read_text()
 g=re.sub(r"versionName '[^']+'", "versionName '1.0.22-s23-board-adaptive'", g, count=1)
