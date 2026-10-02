@@ -379,6 +379,7 @@ jobs:
           python scripts/patch_v118.py
           python scripts/patch_v119.py
           python scripts/patch_v121.py
+          python scripts/patch_v122.py
 
       - name: Validate v1.0.19 strong/fast modes
         run: |
