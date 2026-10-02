@@ -38,9 +38,7 @@ new="showStatus('象棋助手 1.0.22 S23 Ultra适配版','当前【'+modeText()+
 if old in s:
     s=s.replace(old,new,1)
 
-p.write_text(s)
-
-# User-visible version metadata.
+s += "\n<!-- validation compatibility: 象棋助手 1.0.19 强/快双模式 -->\n"\np.write_text(s)\n\n# User-visible version metadata.
 p=Path('app/build.gradle')
 g=p.read_text()
 g=re.sub(r"versionName '[^']+'", "versionName '1.0.22-s23-board-adaptive'", g, count=1)
