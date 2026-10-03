@@ -1,4 +1,4 @@
-name: Build Xiangqi Assistant v1.0.27 v1.0.21 S23 Geometry
+name: Build Xiangqi Assistant v1.0.28 v1.0.21 S23 Midgame Lock
 
 on:
   workflow_dispatch:
@@ -380,6 +380,7 @@ jobs:
           python scripts/patch_v119.py
           python scripts/patch_v121.py
           python scripts/patch_v127.py
+          python scripts/patch_v128.py
 
       - name: Validate v1.0.19 strong/fast modes
         run: |
@@ -412,6 +413,9 @@ jobs:
               "v127 S23 grid geometry": "const SKIN_S23={x:0.07486034,y:0.24947917,w:0.85139665,h:0.44531250}" in ov,
               "v127 vertical grid-line fitter": "function fitS23YOffset()" in ov and "function s23GridScore" in ov,
               "v127 live layout recheck": "s23ProbeTick%8" in ov,
+              "v128 impossible occupancy guard": "hi.length<2||hi.length>32" in ov,
+              "v128 startup refits every frame": "if(currentBoard&&s23ProbeTick>1&&s23ProbeTick%8!==0)return" in ov,
+              "v128 occupancy separation score": "function s23OccupancyGeometryScore" in ov and "sep=minHi-maxLo" in ov,
               "later S23 glyph bank intentionally not applied": "S23_GLYPH_B64" not in ov,
           }
           m=re.search(r"FIXED_GLYPH_B64='([^']+)'",ov)
@@ -427,7 +431,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: generated-v127-v121-s23-source
+          name: generated-v128-v121-s23-source
           path: |
             app/src/main/assets/overlay.html
             app/src/main/java/com/openai/xiangqiassist/ChessAccessibilityService.java
@@ -534,7 +538,7 @@ jobs:
           BT="$ANDROID_HOME/build-tools/35.0.0"
           IN=app/build/outputs/apk/release/app-release-unsigned.apk
           ALIGNED=app-release-aligned.apk
-          OUT=xiangqi-assistant-v1.0.27-v121-s23-geometry.apk
+          OUT=xiangqi-assistant-v1.0.28-v121-s23-midgame-lock.apk
           "$BT/zipalign" -p -f 4 "$IN" "$ALIGNED"
           keytool -genkeypair -v -keystore release.keystore -storepass changeit -keypass changeit -alias xiangqi-v119 -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Xiangqi Assistant v1.0.19,O=Local Build,C=US"
           "$BT/apksigner" sign --ks release.keystore --ks-key-alias xiangqi-v119 --ks-pass pass:changeit --key-pass pass:changeit --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true --v4-signing-enabled false --out "$OUT" "$ALIGNED"
@@ -549,9 +553,9 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: xiangqi-assistant-v1.0.27-v121-s23-geometry-apk
+          name: xiangqi-assistant-v1.0.28-v121-s23-midgame-lock-apk
           path: |
-            xiangqi-assistant-v1.0.27-v121-s23-geometry.apk
+            xiangqi-assistant-v1.0.28-v121-s23-midgame-lock.apk
             apk-sha256.txt
             apk-badging.txt
             apk-signature.txt
