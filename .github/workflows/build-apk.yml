@@ -383,6 +383,7 @@ jobs:
           python scripts/patch_v123.py
           python scripts/patch_v124.py
           python scripts/patch_v125.py
+          python scripts/patch_v126.py
 
       - name: Validate v1.0.19 strong/fast modes
         run: |
@@ -411,6 +412,10 @@ jobs:
               "check latch retained": "checkHandledHash!==checkHash" in ov,
               "no green-frame turn logic": "function detectUiTurn(){return null}" in ov,
               "v119 title": "象棋助手 1.0.19 强/快双模式" in ov,
+              "v126 corrected S23 base center": "y:0.24947917" in ov,
+              "v126 adaptive geometry probe": "function s23GeometryProbe(testCrop)" in ov,
+              "v126 one-time micro fit": "function fitS23Geometry()" in ov and "s23FitQuality" in ov,
+              "v126 direct takeover fit hook": "if(forceFull&&activeSkinProfile==='s23-ultra')fitS23Geometry()" in ov,
           }
           m=re.search(r"FIXED_GLYPH_B64='([^']+)'",ov)
           checks["fixed bank still decodes 14x400"]=bool(m) and len(base64.b64decode(m.group(1)))==5600
