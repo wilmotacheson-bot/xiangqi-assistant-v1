@@ -5,7 +5,7 @@
 1. `PROJECT_STATE.md`
 2. `DEVELOPMENT_GUIDE.md`
 3. `VERSION_HISTORY.md`
-4. 当前最新补丁：`scripts/patch_v118.py` ~ `scripts/patch_v125.py`
+4. 当前最新补丁：`scripts/patch_v118.py` ~ `scripts/patch_v126.py`
 5. `.github/workflows/build-apk.yml`
 
 仓库：
@@ -46,14 +46,15 @@
 - `patch_v123.py`：长局稳定变化恢复，唯一合法最佳匹配容忍轻微噪声。
 - `patch_v124.py`：切屏回来重新新建 Session、按当前棋局接管。
 - `patch_v125.py`：S23 Ultra 本机专用固定 14 类 glyph bank，从用户原始录屏标准开局帧提取；旧 bank fallback。
+- `patch_v126.py`：根据用户新截图修正 S23 棋盘首行采样中心，并在首次中盘/残局全盘重建时做 3×3 小范围几何微调；参考 v1.0.21 的稳定接管行为，但不回退后续版本。
 
 ## 当前版本
-v1.0.25-s23-glyph-bank
+v1.0.26-s23-adaptive-grid
 
 最新成功构建：
-- Actions run：`37100800574`
-- artifact id：`11266330998`
-- main SHA：`d67c5907f49196f6ab76ed3baed66d534f6dac5c`
+- Actions run：`37103476373`
+- artifact id：`11266824640`
+- main SHA：`b651ee1c509fb45193128a90c6552e6ab4acd76a`
 
 注意：workflow 和 artifact 名称仍残留旧 v1.0.19 字样，不代表实际功能版本。不要因此回退代码。
 
@@ -62,7 +63,7 @@ v1.0.25-s23-glyph-bank
 - 不删除已稳定修复；
 - 新修复尽量以新 patch 叠加，便于回滚和定位；
 - 不因单个设备问题全局粗暴放宽识别阈值；
-- 优先设备适配、整盘合法约束、唯一解判断；
+- 优先设备适配、棋盘几何微调、整盘合法约束、唯一解判断；
 - 不猜测不确定棋子，但也不能让一个轻微低置信度永久锁死整个局面；
 - 每个可交付版本必须跑 GitHub Actions 构建、Pikafish smoke test、Gradle build、签名。
 
