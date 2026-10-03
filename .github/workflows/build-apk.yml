@@ -409,7 +409,7 @@ jobs:
               "check latch retained": "checkHandledHash!==checkHash" in ov,
               "no green-frame turn logic": "function detectUiTurn(){return null}" in ov,
               "v119 title": "象棋助手 1.0.19 强/快双模式" in ov,
-              "v127 based on v121 only": "1.0.27-v121-s23-geometry" in Path('app/build.gradle').read_text(),
+              "v128 based on v121 only": "1.0.28-v121-s23-midgame-lock" in Path('app/build.gradle').read_text(),
               "v127 S23 grid geometry": "const SKIN_S23={x:0.07486034,y:0.24947917,w:0.85139665,h:0.44531250}" in ov,
               "v127 vertical grid-line fitter": "function fitS23YOffset()" in ov and "function s23GridScore" in ov,
               "v127 live layout recheck": "s23ProbeTick%8" in ov,
