@@ -1,21 +1,55 @@
 # Version History
 
 ## v1.0.18-fixed-dual-glyph
+- 固定红黑 14 类棋子字形库。
+- 不再动态学习模板。
+- 启动即把当前棋盘当残局接管。
+- 无障碍服务重连重新识别当前棋盘。
+- 去掉手动“新局/接管”按钮。
+- 保留 Pikafish、箭头、将军处理。
 
-Completed:
-- Fixed red/black separate glyph recognition
-- Fixed glyph bank instead of dynamic learning
-- Startup uses current board as new position
-- Removed new game / takeover floating button
-- Accessibility restart triggers fresh recognition
-- Preserved Pikafish analysis
-- Preserved arrows and check notification
+## v1.0.19-strong-fast
+- 新增“强 / 快”双模式。
+- 记住上次模式。
+- 切换模式建立新 engine/session，避免旧结果串入。
+- 强模式保持 v1.0.18 思考强度。
+- 快模式初版面向约 50 步。
 
-## v1.0.19 (Development)
+## v1.0.20-fast-100-move
+- 快模式改为 5 分钟、80–100 步思路。
+- 简单约 0.45–0.7 秒。
+- 普通约 0.7–0.9 秒。
+- 复杂约 1.2–1.8 秒。
+- 关键/应将最高约 2.2 秒。
+- 整盘引擎预算约 72 秒。
+- 强模式不变。
 
-Planned:
-- Strong mode
-- Fast mode
-- Dynamic thinking time
-- Floating window mode switch
-- Remember last selected mode
+## v1.0.21-light-status-auto-hide-mode
+- 顶部状态框大幅淡化，降低遮挡。
+- 模式选择后立即消失。
+- 3 秒不选自动消失并沿用上次模式。
+- 下次重新打开服务时再次显示模式选择。
+
+## v1.0.22-s23-board-adaptive
+- 适配 Galaxy S23 Ultra 19.3:9 棋盘位置。
+- 修复“未识别到木纹棋盘”。
+
+## v1.0.23-stable-transition-recovery
+- 修复长局中“棋面已识别，但变化未确认”后永久卡死。
+- 稳定两帧下允许唯一明显合法匹配容忍轻微识别噪声。
+- 有歧义时仍拒绝猜测。
+
+## v1.0.24-screen-return-recovery
+- 修复切屏离开棋局再回来后识别不到。
+- 前台应用/窗口发生变化时重新建立 Session。
+- 切回时直接以当前棋盘作为新残局接管。
+- 保留上次 Strong/Fast 模式。
+
+## v1.0.25-s23-glyph-bank
+- 分析用户 S23 Ultra 原始录屏。
+- 录屏约 122–123 秒存在干净标准开局，可提取全部 14 类棋子字形。
+- 新增 S23 Ultra 专用固定 glyph bank。
+- 旧固定 glyph bank 保留 fallback。
+- 目标是解决中盘/残局直接打开时“固定字形库对某颗棋不够确定，拒绝猜测”导致无法重建的问题。
+- GitHub Actions run `37100800574` 构建成功。
+- main SHA `d67c5907f49196f6ab76ed3baed66d534f6dac5c`。
