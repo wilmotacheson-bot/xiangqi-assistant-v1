@@ -1,4 +1,4 @@
-name: Build Xiangqi Assistant v1.0.19 Strong Fast Modes
+name: Build Xiangqi Assistant v1.0.27 v1.0.21 S23 Geometry
 
 on:
   workflow_dispatch:
@@ -379,11 +379,7 @@ jobs:
           python scripts/patch_v118.py
           python scripts/patch_v119.py
           python scripts/patch_v121.py
-          python scripts/patch_v122.py
-          python scripts/patch_v123.py
-          python scripts/patch_v124.py
-          python scripts/patch_v125.py
-          python scripts/patch_v126.py
+          python scripts/patch_v127.py
 
       - name: Validate v1.0.19 strong/fast modes
         run: |
@@ -412,10 +408,11 @@ jobs:
               "check latch retained": "checkHandledHash!==checkHash" in ov,
               "no green-frame turn logic": "function detectUiTurn(){return null}" in ov,
               "v119 title": "象棋助手 1.0.19 强/快双模式" in ov,
-              "v126 corrected S23 base center": "y:0.24947917" in ov,
-              "v126 adaptive geometry probe": "function s23GeometryProbe(testCrop)" in ov,
-              "v126 one-time micro fit": "function fitS23Geometry()" in ov and "s23FitQuality" in ov,
-              "v126 direct takeover fit hook": "if(forceFull&&activeSkinProfile==='s23-ultra')fitS23Geometry()" in ov,
+              "v127 based on v121 only": "1.0.27-v121-s23-geometry" in Path('app/build.gradle').read_text(),
+              "v127 S23 grid geometry": "const SKIN_S23={x:0.07486034,y:0.24947917,w:0.85139665,h:0.44531250}" in ov,
+              "v127 vertical grid-line fitter": "function fitS23YOffset()" in ov and "function s23GridScore" in ov,
+              "v127 live layout recheck": "s23ProbeTick%8" in ov,
+              "later S23 glyph bank intentionally not applied": "S23_GLYPH_B64" not in ov,
           }
           m=re.search(r"FIXED_GLYPH_B64='([^']+)'",ov)
           checks["fixed bank still decodes 14x400"]=bool(m) and len(base64.b64decode(m.group(1)))==5600
@@ -430,7 +427,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: generated-v121-source
+          name: generated-v127-v121-s23-source
           path: |
             app/src/main/assets/overlay.html
             app/src/main/java/com/openai/xiangqiassist/ChessAccessibilityService.java
@@ -537,7 +534,7 @@ jobs:
           BT="$ANDROID_HOME/build-tools/35.0.0"
           IN=app/build/outputs/apk/release/app-release-unsigned.apk
           ALIGNED=app-release-aligned.apk
-          OUT=xiangqi-assistant-v1.0.19-strong-fast.apk
+          OUT=xiangqi-assistant-v1.0.27-v121-s23-geometry.apk
           "$BT/zipalign" -p -f 4 "$IN" "$ALIGNED"
           keytool -genkeypair -v -keystore release.keystore -storepass changeit -keypass changeit -alias xiangqi-v119 -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Xiangqi Assistant v1.0.19,O=Local Build,C=US"
           "$BT/apksigner" sign --ks release.keystore --ks-key-alias xiangqi-v119 --ks-pass pass:changeit --key-pass pass:changeit --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true --v4-signing-enabled false --out "$OUT" "$ALIGNED"
@@ -552,9 +549,9 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: xiangqi-assistant-v1.0.19-strong-fast-apk
+          name: xiangqi-assistant-v1.0.27-v121-s23-geometry-apk
           path: |
-            xiangqi-assistant-v1.0.19-strong-fast.apk
+            xiangqi-assistant-v1.0.27-v121-s23-geometry.apk
             apk-sha256.txt
             apk-badging.txt
             apk-signature.txt
