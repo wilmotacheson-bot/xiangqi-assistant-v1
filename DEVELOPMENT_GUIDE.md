@@ -5,7 +5,7 @@
 1. `PROJECT_STATE.md`
 2. `DEVELOPMENT_GUIDE.md`
 3. `VERSION_HISTORY.md`
-4. 当前交付补丁：`scripts/patch_v118.py`、`patch_v119.py`、`patch_v121.py`、`patch_v127.py`
+4. 当前交付补丁：`scripts/patch_v118.py`、`patch_v119.py`、`patch_v121.py`、`patch_v127.py`、`patch_v128.py`
 5. `.github/workflows/build-apk.yml`
 
 仓库：
@@ -40,18 +40,19 @@
 
 ## 当前核心补丁职责
 - `patch_v118.py`：固定双字形库、当前残局接管。
-- `patch_v119.py`：强/快模式及 5 分钟 80–100 步快模式参数。
-- `patch_v121.py`：用户确认最稳定的识别/跟踪基线；状态框淡化，模式选择自动隐藏。
-- `patch_v127.py`：**只改 S23 Ultra 棋盘几何/分辨率适配**。不改棋子分类、变化确认、跟踪、Session、glyph bank。
-- `patch_v122.py` ~ `patch_v126.py`：仅作为历史保留，v1.0.27 workflow 不执行。
+- `patch_v119.py`：强/快模式及快棋预算。
+- `patch_v121.py`：用户确认最稳定的识别/跟踪基线。
+- `patch_v127.py`：只做 S23 Ultra 棋盘几何/分辨率适配。
+- `patch_v128.py`：只增强中途打开时的 S23 初始 y 锁定；加入 2~32 子合法占位约束、棋子/空位暗度分离评分，并在 currentBoard 未锁定时逐帧重试。
+- `patch_v122.py` ~ `patch_v126.py`：历史保留，当前 workflow 不执行。
 
 ## 当前版本
-v1.0.27-v121-s23-geometry
+v1.0.28-v121-s23-midgame-lock
 
 最新成功构建：
-- Actions run：`37107591807`
-- artifact id：`11268716717`
-- build SHA：`c3ad3fe57bf68ce8c5e0f94a37b98f49c3ed6efc`
+- Actions run：`37118729800`
+- artifact id：`11271798414`
+- build SHA：`47974ab49cf21aacb5fd6f5bcaf37475d7e13228`
 
 注意：workflow 和 artifact 名称仍残留旧 v1.0.19 字样，不代表实际功能版本。不要因此回退代码。
 
